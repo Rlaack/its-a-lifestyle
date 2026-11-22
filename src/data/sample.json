@@ -1,0 +1,1336 @@
+{
+  "me": {
+    "name": "You",
+    "street": "Birch Ct",
+    "remindDefault": "Day before",
+    "vis": {
+      "phone": "Connections",
+      "address": "Connections",
+      "location": "During events"
+    },
+    "calPref": null,
+    "sec": {
+      "lock": true,
+      "blur": true,
+      "disappear": "Off"
+    },
+    "visPeople": {},
+    "devices": [
+      {
+        "name": "This iPhone",
+        "kind": "mobile",
+        "os": "iOS",
+        "when": "Active now"
+      }
+    ]
+  },
+  "sec": {
+    "lock": true,
+    "blur": true,
+    "disappear": "Off",
+    "devices": [
+      {
+        "name": "This iPhone",
+        "kind": "mobile",
+        "os": "iOS",
+        "when": "Active now"
+      }
+    ]
+  },
+  "favorites": [
+    "Paul & Kate",
+    "Hank H.",
+    "Anya W.",
+    "Milo T."
+  ],
+  "groups": [
+    {
+      "name": "Dock crew",
+      "members": [
+        "Paul & Kate",
+        "Hank H.",
+        "Milo T.",
+        "Noah & Eva"
+      ]
+    },
+    {
+      "name": "Paddle buddies",
+      "members": [
+        "Milo T.",
+        "Asha S.",
+        "Marta M."
+      ]
+    },
+    {
+      "name": "Game night regulars",
+      "members": [
+        "Noah & Eva",
+        "Milo T.",
+        "Marta M.",
+        "Owen P."
+      ]
+    }
+  ],
+  "verified": [
+    "Anya W.",
+    "Paul & Kate",
+    "Hank H.",
+    "Elise R.",
+    "Milo T.",
+    "Marta M."
+  ],
+  "cals": [
+    {
+      "name": "Maple Ridge",
+      "n": 63,
+      "tone": "pine",
+      "on": true
+    },
+    {
+      "name": "Lake & paddle",
+      "n": 22,
+      "tone": "sky",
+      "on": true
+    },
+    {
+      "name": "Trail crew",
+      "n": 14,
+      "tone": "pine",
+      "on": true
+    },
+    {
+      "name": "Game night",
+      "n": 9,
+      "tone": "plum",
+      "on": true
+    },
+    {
+      "name": "Book club",
+      "n": 11,
+      "tone": "ember",
+      "on": false
+    }
+  ],
+  "hood": {
+    "name": "Maple Ridge",
+    "owner": "Elise R.",
+    "owners": [
+      "Elise R.",
+      "You"
+    ],
+    "places": [
+      "Beach",
+      "Clubhouse",
+      "Trail",
+      "Lake"
+    ],
+    "about": "A wooded lake neighborhood with trails, a beach, a clubhouse, and neighbors who show up.",
+    "code": "ELK-4827",
+    "inviters": "everyone",
+    "joined": true,
+    "more": 52,
+    "members": [
+      {
+        "n": "Elise R.",
+        "by": "Started Maple Ridge",
+        "inv": true
+      },
+      {
+        "n": "You",
+        "by": "Anya W.",
+        "inv": true
+      },
+      {
+        "n": "Paul & Kate",
+        "by": "Elise R.",
+        "inv": true
+      },
+      {
+        "n": "Hank H.",
+        "by": "Elise R.",
+        "inv": true
+      },
+      {
+        "n": "Anya W.",
+        "by": "Paul & Kate",
+        "inv": true
+      },
+      {
+        "n": "The Hendersons",
+        "by": "Asha S.",
+        "inv": true
+      },
+      {
+        "n": "Owen P.",
+        "by": "Marta M.",
+        "inv": true
+      },
+      {
+        "n": "Asha S.",
+        "by": "Hank H.",
+        "inv": true
+      },
+      {
+        "n": "Noah & Eva",
+        "by": "Elise R.",
+        "inv": true
+      },
+      {
+        "n": "Marta M.",
+        "by": "Anya W.",
+        "inv": true
+      },
+      {
+        "n": "Milo T.",
+        "by": "Noah & Eva",
+        "inv": true
+      }
+    ],
+    "extra": [
+      {
+        "n": "Reed B.",
+        "by": "Elise R.",
+        "inv": true
+      },
+      {
+        "n": "Cora K.",
+        "by": "Paul & Kate",
+        "inv": true
+      },
+      {
+        "n": "Mateo T.",
+        "by": "Hank H.",
+        "inv": true
+      },
+      {
+        "n": "Lina H.",
+        "by": "Anya W.",
+        "inv": true
+      },
+      {
+        "n": "Finn R.",
+        "by": "The Hendersons",
+        "inv": true
+      },
+      {
+        "n": "June F.",
+        "by": "Owen P.",
+        "inv": true
+      },
+      {
+        "n": "Theo N.",
+        "by": "Asha S.",
+        "inv": true
+      },
+      {
+        "n": "Ivy C.",
+        "by": "Noah & Eva",
+        "inv": true
+      },
+      {
+        "n": "Cole L.",
+        "by": "Marta M.",
+        "inv": true
+      },
+      {
+        "n": "Beth W.",
+        "by": "Milo T.",
+        "inv": true
+      },
+      {
+        "n": "Faye J.",
+        "by": "Elise R.",
+        "inv": true
+      },
+      {
+        "n": "Jude S.",
+        "by": "Paul & Kate",
+        "inv": true
+      },
+      {
+        "n": "Rhea G.",
+        "by": "Hank H.",
+        "inv": true
+      },
+      {
+        "n": "Luke P.",
+        "by": "Anya W.",
+        "inv": true
+      },
+      {
+        "n": "Greta D.",
+        "by": "The Hendersons",
+        "inv": true
+      },
+      {
+        "n": "Walt M.",
+        "by": "Owen P.",
+        "inv": true
+      },
+      {
+        "n": "Blair B.",
+        "by": "Asha S.",
+        "inv": true
+      },
+      {
+        "n": "Ross K.",
+        "by": "Noah & Eva",
+        "inv": true
+      },
+      {
+        "n": "Drew T.",
+        "by": "Marta M.",
+        "inv": true
+      },
+      {
+        "n": "Piper H.",
+        "by": "Milo T.",
+        "inv": true
+      },
+      {
+        "n": "Nina R.",
+        "by": "Elise R.",
+        "inv": true
+      },
+      {
+        "n": "Hugo F.",
+        "by": "Paul & Kate",
+        "inv": true
+      },
+      {
+        "n": "Clay N.",
+        "by": "Hank H.",
+        "inv": true
+      },
+      {
+        "n": "Zoe C.",
+        "by": "Anya W.",
+        "inv": true
+      },
+      {
+        "n": "Troy L.",
+        "by": "The Hendersons",
+        "inv": true
+      },
+      {
+        "n": "Nell W.",
+        "by": "Owen P.",
+        "inv": true
+      },
+      {
+        "n": "Reed J.",
+        "by": "Asha S.",
+        "inv": true
+      },
+      {
+        "n": "Cora S.",
+        "by": "Noah & Eva",
+        "inv": true
+      },
+      {
+        "n": "Mateo G.",
+        "by": "Marta M.",
+        "inv": true
+      },
+      {
+        "n": "Lina P.",
+        "by": "Milo T.",
+        "inv": true
+      },
+      {
+        "n": "Finn D.",
+        "by": "Elise R.",
+        "inv": true
+      },
+      {
+        "n": "June M.",
+        "by": "Paul & Kate",
+        "inv": true
+      },
+      {
+        "n": "Theo B.",
+        "by": "Hank H.",
+        "inv": true
+      },
+      {
+        "n": "Ivy K.",
+        "by": "Anya W.",
+        "inv": true
+      },
+      {
+        "n": "Cole T.",
+        "by": "The Hendersons",
+        "inv": true
+      },
+      {
+        "n": "Beth H.",
+        "by": "Owen P.",
+        "inv": true
+      },
+      {
+        "n": "Faye R.",
+        "by": "Asha S.",
+        "inv": true
+      },
+      {
+        "n": "Jude F.",
+        "by": "Noah & Eva",
+        "inv": true
+      },
+      {
+        "n": "Rhea N.",
+        "by": "Marta M.",
+        "inv": true
+      },
+      {
+        "n": "Luke C.",
+        "by": "Milo T.",
+        "inv": true
+      },
+      {
+        "n": "Greta L.",
+        "by": "Elise R.",
+        "inv": true
+      },
+      {
+        "n": "Walt W.",
+        "by": "Paul & Kate",
+        "inv": true
+      },
+      {
+        "n": "Blair J.",
+        "by": "Hank H.",
+        "inv": true
+      },
+      {
+        "n": "Ross S.",
+        "by": "Anya W.",
+        "inv": true
+      },
+      {
+        "n": "Drew G.",
+        "by": "The Hendersons",
+        "inv": true
+      },
+      {
+        "n": "Piper P.",
+        "by": "Owen P.",
+        "inv": true
+      },
+      {
+        "n": "Nina D.",
+        "by": "Asha S.",
+        "inv": true
+      },
+      {
+        "n": "Hugo M.",
+        "by": "Noah & Eva",
+        "inv": true
+      },
+      {
+        "n": "Clay B.",
+        "by": "Marta M.",
+        "inv": true
+      },
+      {
+        "n": "Zoe K.",
+        "by": "Milo T.",
+        "inv": true
+      },
+      {
+        "n": "Troy T.",
+        "by": "Elise R.",
+        "inv": true
+      },
+      {
+        "n": "Nell H.",
+        "by": "Paul & Kate",
+        "inv": true
+      }
+    ],
+    "map": "lake"
+  },
+  "gatherings": [
+    {
+      "id": "campfire",
+      "type": "beacon",
+      "title": "Campfire’s lit",
+      "host": "Paul & Kate",
+      "when": "Now until about 10 PM",
+      "dist": "5 min walk, or paddle over",
+      "where": "Firepit by their dock, Shore Rd",
+      "precision": "Approximate",
+      "audience": "all",
+      "going": [
+        "Hank H.",
+        "Asha S.",
+        "Milo T.",
+        "Marta M."
+      ],
+      "rsvp": null,
+      "live": true,
+      "note": "Bring a chair and whatever you’re drinking. Plenty of firewood."
+    },
+    {
+      "id": "pollfire",
+      "type": "poll",
+      "title": "When should we do the beach bonfire?",
+      "host": "Paul & Kate",
+      "kind": "date",
+      "multi": true,
+      "closes": "Closes Sunday",
+      "m": 0,
+      "d": 0,
+      "dow": "",
+      "time": "",
+      "where": "",
+      "precision": "",
+      "audience": "all",
+      "going": [
+        "Paul & Kate"
+      ],
+      "rsvp": null,
+      "options": [
+        {
+          "t": "Fri, Dec 11",
+          "v": [
+            "Paul & Kate",
+            "Hank H.",
+            "Milo T.",
+            "Marta M."
+          ],
+          "iso": "2026-12-11"
+        },
+        {
+          "t": "Sat, Dec 12",
+          "v": [
+            "Paul & Kate",
+            "Anya W.",
+            "Asha S.",
+            "Elise R.",
+            "Noah & Eva"
+          ],
+          "iso": "2026-12-12"
+        },
+        {
+          "t": "Sat, Dec 19",
+          "v": [
+            "Hank H.",
+            "Anya W."
+          ],
+          "iso": "2026-12-19"
+        }
+      ]
+    },
+    {
+      "id": "raft",
+      "type": "poll",
+      "title": "Should we chip in for a new swim raft at the beach?",
+      "host": "Elise R.",
+      "kind": "yesno",
+      "multi": false,
+      "closes": "Closes Dec 1",
+      "m": 0,
+      "d": 0,
+      "dow": "",
+      "time": "",
+      "where": "",
+      "precision": "",
+      "audience": "all",
+      "going": [
+        "Elise R."
+      ],
+      "rsvp": null,
+      "note": "Quote is about $40 a household. The old one is waterlogged.",
+      "options": [
+        {
+          "t": "Yes",
+          "v": [
+            "Elise R.",
+            "Hank H.",
+            "Marta M.",
+            "Milo T.",
+            "Asha S.",
+            "Paul & Kate"
+          ]
+        },
+        {
+          "t": "No",
+          "v": [
+            "Noah & Eva",
+            "Owen P."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dock",
+      "type": "help",
+      "title": "Pull the dock before the ice",
+      "host": "Hank H.",
+      "r": {
+        "👍": [
+          "Paul & Kate",
+          "Marta M."
+        ],
+        "🙏": [
+          "Elise R."
+        ]
+      },
+      "m": 11,
+      "d": 21,
+      "dow": "Sat",
+      "time": "9:00 AM, about an hour",
+      "where": "Hank’s shoreline, Shore Rd",
+      "precision": "Shared with helpers",
+      "audience": "all",
+      "going": [
+        "Hank H.",
+        "Noah & Eva",
+        "Milo T."
+      ],
+      "rsvp": null,
+      "note": "Four sections, goes fast with a few people. Beer and breakfast after, on me.",
+      "lists": [
+        {
+          "cat": "Hands",
+          "items": [
+            {
+              "name": "Strong back",
+              "by": "Noah & Eva"
+            },
+            {
+              "name": "Strong back",
+              "by": "Milo T."
+            },
+            {
+              "name": "Strong back",
+              "by": null
+            },
+            {
+              "name": "Someone with waders",
+              "by": null
+            }
+          ]
+        },
+        {
+          "cat": "Gear",
+          "items": [
+            {
+              "name": "Come-along winch",
+              "by": null
+            }
+          ]
+        }
+      ],
+      "y": 2026
+    },
+    {
+      "id": "potluck",
+      "type": "potluck",
+      "title": "Friendsgiving Potluck",
+      "host": "Elise R.",
+      "r": {
+        "❤️": [
+          "Hank H.",
+          "Anya W.",
+          "Marta M."
+        ],
+        "👍": [
+          "Milo T.",
+          "Noah & Eva"
+        ],
+        "🙏": [
+          "Asha S."
+        ]
+      },
+      "maybe": [
+        "Owen P.",
+        "The Hendersons"
+      ],
+      "m": 11,
+      "d": 21,
+      "dow": "Sat",
+      "time": "5:00 PM",
+      "where": "The clubhouse",
+      "precision": "Common area",
+      "audience": "all",
+      "going": [
+        "Elise R.",
+        "Hank H.",
+        "Anya W.",
+        "Noah & Eva",
+        "Marta M.",
+        "Asha S.",
+        "Milo T."
+      ],
+      "rsvp": null,
+      "note": "Clubhouse is ours from 4 to 10. Kids can run the beach trail. Fire pit on the beach after if it’s not too windy.",
+      "lists": [
+        {
+          "cat": "Mains",
+          "items": [
+            {
+              "name": "Smoked turkey",
+              "by": "Hank H."
+            },
+            {
+              "name": "Pulled pork",
+              "by": "Noah & Eva"
+            },
+            {
+              "name": "A vegetarian main",
+              "by": null
+            }
+          ]
+        },
+        {
+          "cat": "Sides",
+          "items": [
+            {
+              "name": "Cornbread",
+              "by": "Anya W."
+            },
+            {
+              "name": "Harvest salad",
+              "by": null
+            },
+            {
+              "name": "Mac & cheese",
+              "by": null
+            }
+          ]
+        },
+        {
+          "cat": "Desserts & drinks",
+          "items": [
+            {
+              "name": "Apple crisp",
+              "by": "Marta M."
+            },
+            {
+              "name": "Cooler of local beer",
+              "by": null
+            },
+            {
+              "name": "Hot cider",
+              "by": null
+            }
+          ]
+        }
+      ],
+      "y": 2026
+    },
+    {
+      "id": "hike",
+      "type": "walk",
+      "title": "Sunday trail hike",
+      "host": "Anya W.",
+      "m": 11,
+      "d": 22,
+      "dow": "Sun",
+      "time": "8:00 AM",
+      "where": "Meet at the beach trailhead",
+      "route": "Lake loop + north woods trail · 3.1 mi · about 70 min",
+      "pace": "Easy pace, dogs welcome, some roots and mud",
+      "precision": "Live only during the hike",
+      "audience": "cal:Trail crew",
+      "going": [
+        "Anya W.",
+        "Asha S.",
+        "Milo T."
+      ],
+      "rsvp": null,
+      "recurring": "Every Sunday",
+      "y": 2026
+    },
+    {
+      "id": "meals",
+      "type": "mealtrain",
+      "title": "Meals for the Hendersons",
+      "host": "Asha S.",
+      "r": {
+        "❤️": [
+          "Elise R.",
+          "Anya W.",
+          "Hank H.",
+          "Marta M.",
+          "Paul & Kate"
+        ],
+        "🙏": [
+          "The Hendersons"
+        ]
+      },
+      "m": 11,
+      "d": 23,
+      "dow": "Mon",
+      "time": "Lunch and dinner drop-offs",
+      "where": "For the Hendersons",
+      "for": "the Hendersons",
+      "address": "412 Cedar Ln",
+      "dropoff": "Leave food in the cooler on the front porch and text Ada instead of knocking.",
+      "diet": "No nuts, please. The kids love pasta. Disposable containers are best.",
+      "precision": "address shown to people who sign up",
+      "audience": "all",
+      "going": [
+        "Asha S.",
+        "Anya W.",
+        "Elise R."
+      ],
+      "rsvp": null,
+      "note": "New baby girl! Let’s cover the Hendersons for their first week home.",
+      "days": [
+        {
+          "d": "Mon, Nov 23",
+          "slots": [
+            {
+              "meal": "Dinner",
+              "by": "Anya W.",
+              "what": "Chicken pot pie"
+            }
+          ]
+        },
+        {
+          "d": "Tue, Nov 24",
+          "slots": [
+            {
+              "meal": "Lunch",
+              "by": null
+            },
+            {
+              "meal": "Dinner",
+              "by": null
+            }
+          ]
+        },
+        {
+          "d": "Wed, Nov 25",
+          "slots": [
+            {
+              "meal": "Dinner",
+              "by": "Elise R.",
+              "what": "Lasagna and a salad"
+            }
+          ]
+        },
+        {
+          "d": "Thu, Nov 26 (Thanksgiving)",
+          "slots": [],
+          "note": "Family is hosting. No meals needed."
+        },
+        {
+          "d": "Fri, Nov 27",
+          "slots": [
+            {
+              "meal": "Dinner",
+              "by": null
+            }
+          ]
+        }
+      ],
+      "y": 2026
+    },
+    {
+      "id": "paddle",
+      "type": "paddle",
+      "title": "Last paddle of the season",
+      "host": "Milo T.",
+      "m": 11,
+      "d": 29,
+      "dow": "Sun",
+      "time": "1:00 PM, warmest part of the day",
+      "where": "The beach",
+      "route": "Once around the lake · about 1 hour",
+      "pace": "Slow and social. Kayaks, canoes and boards welcome.",
+      "recurring": "One time",
+      "precision": "Common area",
+      "audience": "cal:Lake & paddle",
+      "going": [
+        "Milo T.",
+        "Asha S.",
+        "Marta M."
+      ],
+      "rsvp": null,
+      "note": "The water is cold now, so wear dry layers. I have spare boats and PFDs, claim one below.",
+      "lists": [
+        {
+          "cat": "Spare gear",
+          "items": [
+            {
+              "name": "Kayak #1 + PFD",
+              "by": "Asha S."
+            },
+            {
+              "name": "Kayak #2 + PFD",
+              "by": null
+            },
+            {
+              "name": "Paddleboard",
+              "by": null
+            }
+          ]
+        },
+        {
+          "cat": "Bring to the beach after",
+          "items": [
+            {
+              "name": "Thermos of cocoa",
+              "by": null
+            },
+            {
+              "name": "Firewood for the beach pit",
+              "by": "Marta M."
+            }
+          ]
+        }
+      ],
+      "y": 2026
+    },
+    {
+      "id": "books",
+      "type": "gathering",
+      "title": "Book club",
+      "host": "Anya W.",
+      "m": 11,
+      "d": 30,
+      "dow": "Mon",
+      "time": "7:00 PM",
+      "where": "Anya’s porch, Cedar Ln",
+      "precision": "Shared with guests",
+      "audience": "cal:Book club",
+      "going": [
+        "Anya W.",
+        "Elise R.",
+        "Asha S."
+      ],
+      "rsvp": null,
+      "note": "First half of this month’s book. Wine welcome.",
+      "y": 2026
+    },
+    {
+      "id": "games",
+      "type": "games",
+      "title": "Game night",
+      "host": "Noah & Eva",
+      "m": 12,
+      "d": 3,
+      "dow": "Thu",
+      "time": "7:00 PM",
+      "where": "Noah & Eva’s, Ridge Dr",
+      "precision": "Shared with guests",
+      "audience": "cal:Game night",
+      "going": [
+        "Noah & Eva",
+        "Milo T.",
+        "Marta M.",
+        "Owen P."
+      ],
+      "rsvp": null,
+      "lists": [
+        {
+          "cat": "Games",
+          "items": [
+            {
+              "name": "Codenames",
+              "by": "Milo T."
+            },
+            {
+              "name": "A long strategy game",
+              "by": null
+            }
+          ]
+        },
+        {
+          "cat": "Snacks & drinks",
+          "items": [
+            {
+              "name": "Chips & salsa",
+              "by": "Marta M."
+            },
+            {
+              "name": "A six-pack to share",
+              "by": null
+            }
+          ]
+        }
+      ],
+      "y": 2026
+    },
+    {
+      "id": "dave50",
+      "type": "surprise",
+      "title": "Owen’s 50th",
+      "host": "Marta M.",
+      "m": 12,
+      "d": 4,
+      "dow": "Fri",
+      "time": "6:30 PM, arrive by 6:15",
+      "where": "The clubhouse",
+      "precision": "Common area",
+      "audience": "except",
+      "excluded": [
+        "Owen P."
+      ],
+      "going": [
+        "Marta M.",
+        "Paul & Kate",
+        "Hank H.",
+        "Elise R.",
+        "Noah & Eva"
+      ],
+      "rsvp": null,
+      "note": "Park in the beach lot so he doesn’t spot the cars.",
+      "y": 2026
+    },
+    {
+      "id": "move",
+      "type": "challenge",
+      "title": "Move-it November",
+      "host": "Anya W.",
+      "y": 2026,
+      "m": 11,
+      "d": 1,
+      "dow": "Sun",
+      "time": "30 days",
+      "where": "",
+      "precision": "",
+      "audience": "all",
+      "going": [
+        "Milo T.",
+        "Hank H.",
+        "Asha S.",
+        "Anya W.",
+        "Marta M.",
+        "Owen P."
+      ],
+      "rsvp": null,
+      "note": "Any exercise counts, chores too. Raking, push-mowing, splitting wood, walks, runs, the rowing machine. Log it, honor system.",
+      "r": {
+        "❤️": [
+          "Hank H.",
+          "Asha S."
+        ],
+        "👍": [
+          "Milo T."
+        ]
+      },
+      "challenge": {
+        "mode": "time",
+        "start": "2026-11-01",
+        "end": "2026-11-30",
+        "signupBy": "2026-11-30",
+        "per": 15,
+        "levels": [
+          {
+            "name": "Light",
+            "pts": 1
+          },
+          {
+            "name": "Hard",
+            "pts": 2
+          }
+        ],
+        "counts": [
+          "Walking",
+          "Running",
+          "Biking",
+          "Swimming",
+          "Paddling",
+          "Strength",
+          "HIIT",
+          "Yoga or stretching",
+          "Yard work and chores",
+          "Anything active"
+        ],
+        "log": [
+          {
+            "id": "m1",
+            "who": "Milo T.",
+            "day": "2026-11-02",
+            "what": "Running",
+            "amount": 40,
+            "level": 1
+          },
+          {
+            "id": "m2",
+            "who": "Milo T.",
+            "day": "2026-11-05",
+            "what": "Strength",
+            "amount": 45,
+            "level": 1
+          },
+          {
+            "id": "m3",
+            "who": "Milo T.",
+            "day": "2026-11-09",
+            "what": "Running",
+            "amount": 30,
+            "level": 1
+          },
+          {
+            "id": "m4",
+            "who": "Milo T.",
+            "day": "2026-11-14",
+            "what": "Biking",
+            "amount": 60,
+            "level": 0
+          },
+          {
+            "id": "m5",
+            "who": "Milo T.",
+            "day": "2026-11-17",
+            "what": "HIIT",
+            "amount": 30,
+            "level": 1
+          },
+          {
+            "id": "m6",
+            "who": "Hank H.",
+            "day": "2026-11-03",
+            "what": "Yard work and chores",
+            "amount": 90,
+            "level": 1
+          },
+          {
+            "id": "m7",
+            "who": "Hank H.",
+            "day": "2026-11-08",
+            "what": "Walking",
+            "amount": 45,
+            "level": 0
+          },
+          {
+            "id": "m8",
+            "who": "Hank H.",
+            "day": "2026-11-12",
+            "what": "Yard work and chores",
+            "amount": 60,
+            "level": 1
+          },
+          {
+            "id": "m9",
+            "who": "Hank H.",
+            "day": "2026-11-16",
+            "what": "Walking",
+            "amount": 30,
+            "level": 0
+          },
+          {
+            "id": "m10",
+            "who": "Asha S.",
+            "day": "2026-11-01",
+            "what": "Swimming",
+            "amount": 45,
+            "level": 1
+          },
+          {
+            "id": "m11",
+            "who": "Asha S.",
+            "day": "2026-11-06",
+            "what": "Yoga or stretching",
+            "amount": 30,
+            "level": 0
+          },
+          {
+            "id": "m12",
+            "who": "Asha S.",
+            "day": "2026-11-11",
+            "what": "Walking",
+            "amount": 60,
+            "level": 0
+          },
+          {
+            "id": "m13",
+            "who": "Asha S.",
+            "day": "2026-11-15",
+            "what": "Paddling",
+            "amount": 45,
+            "level": 0
+          },
+          {
+            "id": "m14",
+            "who": "Asha S.",
+            "day": "2026-11-18",
+            "what": "Swimming",
+            "amount": 40,
+            "level": 1
+          },
+          {
+            "id": "m15",
+            "who": "Anya W.",
+            "day": "2026-11-04",
+            "what": "Walking",
+            "amount": 60,
+            "level": 0
+          },
+          {
+            "id": "m16",
+            "who": "Anya W.",
+            "day": "2026-11-10",
+            "what": "Walking",
+            "amount": 60,
+            "level": 0
+          },
+          {
+            "id": "m17",
+            "who": "Anya W.",
+            "day": "2026-11-13",
+            "what": "Yard work and chores",
+            "amount": 45,
+            "level": 1
+          },
+          {
+            "id": "m18",
+            "who": "Marta M.",
+            "day": "2026-11-07",
+            "what": "Biking",
+            "amount": 30,
+            "level": 0
+          },
+          {
+            "id": "m19",
+            "who": "Marta M.",
+            "day": "2026-11-15",
+            "what": "Strength",
+            "amount": 30,
+            "level": 1
+          }
+        ]
+      }
+    }
+  ],
+  "chats": [
+    {
+      "id": "c-lake",
+      "name": "Lake life",
+      "icon": "wave",
+      "members": 41,
+      "msgs": [
+        {
+          "f": "key",
+          "who": "Hank H."
+        },
+        {
+          "f": "Hank H.",
+          "t": "Skim ice in the cove this morning. Get your docks out this weekend."
+        },
+        {
+          "f": "Marta M.",
+          "t": "Anyone see a green paddleboard? It blew off our dock last night."
+        },
+        {
+          "f": "Milo T.",
+          "t": "It’s on the beach by the swim line. I pulled it up past the waterline.",
+          "r": {
+            "👍": [
+              "Marta M.",
+              "Hank H."
+            ]
+          }
+        },
+        {
+          "f": "Milo T.",
+          "type": "photo",
+          "src": "sample:paddleboard",
+          "alt": "Green paddleboard pulled up on the beach",
+          "t": "Here it is"
+        },
+        {
+          "f": "Marta M.",
+          "t": "You’re the best. I owe you a beer.",
+          "r": {
+            "🍺": [
+              "Milo T.",
+              "Hank H.",
+              "Paul & Kate"
+            ],
+            "❤️": [
+              "Anya W."
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "c-potluck",
+      "gid": "potluck",
+      "name": "Friendsgiving Potluck",
+      "members": 24,
+      "msgs": [
+        {
+          "f": "Elise R.",
+          "t": "Clubhouse is booked. Still need a vegetarian main!",
+          "r": {
+            "👍": [
+              "Hank H.",
+              "Anya W.",
+              "Marta M."
+            ]
+          }
+        },
+        {
+          "f": "Hank H.",
+          "t": "Turkey goes in the smoker at 6 AM."
+        },
+        {
+          "f": "Marta M.",
+          "t": "Apple crisp, with or without ice cream?"
+        },
+        {
+          "f": "Anya W.",
+          "t": "With. Obviously."
+        }
+      ]
+    },
+    {
+      "id": "c-tj",
+      "name": "Paul & Kate",
+      "members": 2,
+      "msgs": [
+        {
+          "f": "device",
+          "who": "Kate",
+          "dev": "iPad"
+        },
+        {
+          "f": "Paul & Kate",
+          "t": "Fire’s going by the dock if you want to come by 🔥"
+        }
+      ]
+    },
+    {
+      "id": "c-hike",
+      "gid": "hike",
+      "name": "Trail crew",
+      "members": 14,
+      "msgs": [
+        {
+          "f": "Anya W.",
+          "t": "North woods trail has a tree down past the second bridge. We can step over it."
+        },
+        {
+          "f": "Milo T.",
+          "t": "Bringing the dog"
+        }
+      ]
+    },
+    {
+      "id": "c-dave",
+      "gid": "dave50",
+      "name": "Owen’s 50th (secret)",
+      "members": 18,
+      "secret": true,
+      "timer": "1 week",
+      "msgs": [
+        {
+          "f": "Marta M.",
+          "t": "Reminder: Owen can’t see this chat. Keep it that way 🤫"
+        },
+        {
+          "f": "Noah & Eva",
+          "t": "We’ll take him to dinner first and bring him by at 6:30."
+        }
+      ]
+    }
+  ]
+}

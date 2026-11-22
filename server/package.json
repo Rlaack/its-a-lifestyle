@@ -1,0 +1,9 @@
+{
+  "name": "its-a-lifestyle-relay",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "dependencies": {
+    "@signalapp/libsignal-client": "0.108.1"
+  }
+}

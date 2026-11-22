@@ -1,0 +1,8 @@
+{
+  "platforms": ["apple"],
+  "apple": {
+    "podspecPath": ["ios/LibSignalClient.podspec", "ios/LifestyleCrypto.podspec"],
+    "swiftModuleName": ["LibSignalClient", "LifestyleCrypto"],
+    "modules": ["LifestyleCryptoModule"]
+  }
+}

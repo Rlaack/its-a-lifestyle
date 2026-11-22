@@ -1,0 +1,14 @@
+services:
+  relay:
+    build: .
+    env_file: [{ path: .env.local, required: false }]   # push key (git-ignored)
+    environment: [PUSH_DEBUG=1]
+    # Bound to this Mac only, so nothing else on the network can reach it.
+    ports: ["127.0.0.1:8787:8787"]
+    volumes: ["relay-data:/data"]
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETUID, SETGID]   # only to hand the volume to the unprivileged user at start
+    security_opt: ["no-new-privileges:true"]
+volumes:
+  relay-data:
