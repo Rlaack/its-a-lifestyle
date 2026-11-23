@@ -135,6 +135,15 @@ const updatePlan = (id: string, fn: (p: Plan) => Plan) =>
   set(s => ({ ...s, plans: s.plans.map(p => (p.id === id ? fn(p) : p)) }));
 const toggleIn = (list: string[] = [], who: string) => (list.includes(who) ? list.filter(x => x !== who) : [...list, who]);
 const toggleReaction = (r: Reactions = {}, e: string): Reactions => ({ ...r, [e]: toggleIn(r[e], 'You') });
+/** The first calendar is the whole neighborhood's and carries its name. A custom calendar can already have
+ *  that name, and plans find calendars by name, so the main one stays distinct. */
+const withHoodName = (cals: Calendar[], name: string): Calendar[] => {
+  const main = cals[0];
+  if (!main) return cals;
+  const taken = cals.slice(1).some(c => c.name.toLowerCase() === name.toLowerCase());
+  const next = taken ? `${name} (everyone)` : name;
+  return main.name === next ? cals : [{ ...main, name: next }, ...cals.slice(1)];
+};
 
 /* ---------- derived ---------- */
 const todayStr = () => { const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; };
@@ -483,7 +492,7 @@ export const actions = {
     set(s => ({ ...s, hood: { ...s.hood, code: `${pick()}${pick()}${pick()}-${1000 + Math.floor(Math.random() * 9000)}` } }));
   },
   saveHood(name: string, about: string, places: string[]) {
-    set(s => ({ ...s, hood: { ...s.hood, name, about, places }, hoodList: s.hoodList.map(h => (h.id === s.cur ? { ...h, name } : h)) }));
+    set(s => ({ ...s, hood: { ...s.hood, name, about, places }, cals: withHoodName(s.cals, name), hoodList: s.hoodList.map(h => (h.id === s.cur ? { ...h, name } : h)) }));
     hoodChanged({ t: 'settings' });
   },
   makeOwner(name: string) {
@@ -573,9 +582,10 @@ export const actions = {
     const patch = (h: Neighborhood): Neighborhood => ({ ...h, ...info, cover: h.cover?.kind === 'photo' && !info.cover ? h.cover : info.cover ?? h.cover });
     set(s => {
       const hoodList = info.name ? s.hoodList.map(h => (h.id === id ? { ...h, name: info.name! } : h)) : s.hoodList;
-      if (s.cur === id) return { ...s, hoodList, hood: patch(s.hood) };
+      const named = (cals: Calendar[]) => (info.name ? withHoodName(cals, info.name) : cals);
+      if (s.cur === id) return { ...s, hoodList, hood: patch(s.hood), cals: named(s.cals) };
       const st = s.stash[id];
-      return st ? { ...s, hoodList, stash: { ...s.stash, [id]: { ...st, hood: patch(st.hood) } } } : { ...s, hoodList };
+      return st ? { ...s, hoodList, stash: { ...s.stash, [id]: { ...st, hood: patch(st.hood), cals: named(st.cals) } } } : { ...s, hoodList };
     });
   },
   /** I was removed from a real neighborhood (or it no longer exists): it leaves this phone. */
