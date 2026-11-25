@@ -34,7 +34,7 @@ function Navigator() {
         <Stack.Screen name="calendar-add/[id]" options={{ presentation: 'modal' }} />
         <Stack.Screen name="calendars" options={{ presentation: 'modal' }} />
         <Stack.Screen name="chat-info/[id]" options={{ presentation: 'modal' }} />
-        {['visibility/[field]', 'my-code', 'scan', 'connect', 'phone', 'transfer', 'backup', 'subscribe', 'picture'].map(n => <Stack.Screen key={n} name={n} options={{ presentation: 'modal' }} />)}
+        {['visibility/[field]', 'my-code', 'scan', 'connect', 'phone', 'transfer', 'backup', 'subscribe', 'picture', 'blocked'].map(n => <Stack.Screen key={n} name={n} options={{ presentation: 'modal' }} />)}
       </Stack>
     </>
   );

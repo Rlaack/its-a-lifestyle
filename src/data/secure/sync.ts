@@ -33,7 +33,9 @@ type SavedHood = { code: string; name: string; ownerSecret?: string; live?: stri
 type Saved = { v: 1; agreed?: boolean; myName: string | null; myPhone?: string | null; contacts: Contact[]; chats: Chat[]; hoods?: SavedHood[];
   groups?: Group[]; outbox?: OutboxItem[]; hoodData?: Record<string, { plans: Plan[]; chats: Chat[] }>; cur?: string; blocked?: string[]; accessKeys?: Record<string, string>;
   /** My picture as shared, and neighbors' pictures by account (with the name they had). */
-  myPic?: SharedPic; pics?: Record<string, { name: string; pic: SharedPic }> };
+  myPic?: SharedPic; pics?: Record<string, { name: string; pic: SharedPic }>;
+  /** The name each blocked person had when blocked, for the Blocked list. */
+  blockedNames?: Record<string, string> };
 export type SecureStatus = 'unavailable' | 'starting' | 'ready' | 'offline' | 'closed';
 
 const VAULT = 'chats-v1';
@@ -51,6 +53,7 @@ let hoodMembers: Record<string, HoodMember[]> = {};
 let savedHoodData: Saved['hoodData'] = {};
 const hoodMeta: Record<string, HoodMeta> = {};
 let blocked: string[] = [];
+let blockedNames: Record<string, string> = {};
 /** Other people's access keys (learned from their messages and neighborhood profiles): needed to send them sealed messages. */
 let accessKeys: Record<string, string> = {};
 let myPic: SharedPic | undefined;
@@ -157,7 +160,7 @@ async function writeVault() {
       hoodData[h.code] = d ? { plans: d.plans, chats: d.chats.filter(c => c.shared?.plan || c.system) } : savedHoodData?.[h.code] ?? { plans: [], chats: [] };
     }
     const { groups, outbox } = groupState();
-    const data: Saved = { v: 1, agreed, myName, myPhone, contacts, hoods, groups, outbox, hoodData, cur: st.cur, blocked, accessKeys, myPic, pics,
+    const data: Saved = { v: 1, agreed, myName, myPhone, contacts, hoods, groups, outbox, hoodData, cur: st.cur, blocked, accessKeys, myPic, pics, blockedNames,
       chats: st.chats.filter(c => c.secure || (c.shared && !c.shared.plan)) };
     try { await Crypto!.vaultWrite(VAULT, JSON.stringify(data)); } catch (e) { console.warn('Could not save encrypted chats', e); }
     shareStateWithMyDevices();
@@ -249,6 +252,7 @@ export async function startSecureMessaging() {
       savedHoodData = saved.hoodData ?? {};
       savedCur = saved.cur;
       blocked = saved.blocked ?? [];
+      blockedNames = saved.blockedNames ?? {};
       accessKeys = saved.accessKeys ?? {};
       myPic = saved.myPic; pics = saved.pics ?? {};
       showPic('You', myPic);
@@ -758,8 +762,15 @@ export function accountInCurrentHood(name: string): string | undefined {
 /* ---------- block and report ---------- */
 
 export const isBlocked = (account: string) => blocked.includes(account);
+/** Everyone I've blocked, with the best name I have for them. */
+export function blockedPeople(): { account: string; name: string }[] {
+  return blocked.map(a => ({ account: a, name: contacts.find(c => c.account === a)?.name ?? hoodNameFor(a) ?? blockedNames[a] ?? `Neighbor ${short(a)}` }));
+}
+
 export function setBlocked(account: string, on: boolean, name?: string) {
   blocked = on ? [...new Set([...blocked, account])] : blocked.filter(a => a !== account);
+  if (on && name) blockedNames = { ...blockedNames, [account]: name.slice(0, 40) };
+  if (!on) { const { [account]: _gone, ...rest } = blockedNames; blockedNames = rest; }
   const id = chatIdFor(account);
   if (getState().chats.some(c => c.id === id)) {
     mutate(s => ({ ...s, chats: s.chats.map(c => (c.id === id ? { ...c, msgs: [...c.msgs, { f: 'sys', t: on ? `You blocked ${name ?? 'this person'}. You won’t get their messages.` : `You unblocked ${name ?? 'this person'}.` }] } : c)) }));
@@ -826,7 +837,7 @@ async function restartFresh() {
   myAccount = null; myName = null; myPhone = null; contacts = []; hoods = []; blocked = []; myDeviceId = 1; lastSharedState = ''; agreed = false;
   for (const k of Object.keys(hoodMembers)) delete hoodMembers[k];
   for (const k of Object.keys(hoodMeta)) delete hoodMeta[k];
-  savedHoodData = {}; savedCur = undefined; accessKeys = {}; myPic = undefined; pics = {};
+  savedHoodData = {}; savedCur = undefined; accessKeys = {}; myPic = undefined; pics = {}; blockedNames = {};
   resetGroups();
   actions.resetAll();
   setStatus('starting');

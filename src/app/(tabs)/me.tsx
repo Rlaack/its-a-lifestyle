@@ -7,7 +7,7 @@ import { actions, useStore , inviteSummary } from '@/data/store';
 import type { IconName } from '@/theme/paths';
 import { useTheme } from '@/theme/theme';
 import { toast } from '@/components/Toast';
-import { deleteMyAccount, getMyName, phoneEnabled, supportId, useSecureStatus, useSecureVersion, isLinkedDevice, unlinkThisDevice } from '@/data/secure/sync';
+import { blockedPeople, deleteMyAccount, getMyName, phoneEnabled, supportId, useSecureStatus, useSecureVersion, isLinkedDevice, unlinkThisDevice } from '@/data/secure/sync';
 import * as Clipboard from 'expo-clipboard';
 import { GUIDE_URL, SUPPORT_EMAIL } from '@/data/security';
 import { lockNow } from '@/components/PrivacyGuard';
@@ -43,6 +43,7 @@ export default function MeScreen() {
       catch (e) { if (__DEV__) console.log('[groups] delete failed', String(e)); toast('Couldn’t reach the server, so nothing was deleted. Try again when you’re online.'); }
     } }]);
   const chevron = <View style={{ transform: [{ scaleX: -1 }] }}><Icon name="back" color={c.muted} size={18} /></View>;
+  const blockedCount = blockedPeople().length;
   return (
     <Screen title="Me">
       <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
@@ -166,6 +167,11 @@ export default function MeScreen() {
           <Row first onPress={() => router.push('/my-code')}>
             <Icon name="users" color={c.ink} />
             <View style={{ flex: 1 }}><T variant="strong" style={{ fontSize: 15 }}>Show my code</T><T variant="muted">A neighbor scans it to connect and verify</T></View>
+            {chevron}
+          </Row>
+          <Row onPress={() => router.push('/blocked')}>
+            <Icon name="shield" color={c.ink} />
+            <View style={{ flex: 1 }}><T variant="strong" style={{ fontSize: 15 }}>Blocked people</T><T variant="muted">{blockedCount ? `${blockedCount} blocked · unblock anyone` : 'No one blocked'}</T></View>
             {chevron}
           </Row>
           {phoneEnabled && <Row onPress={() => router.push('/phone')}>
