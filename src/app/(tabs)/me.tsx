@@ -9,7 +9,7 @@ import { useTheme } from '@/theme/theme';
 import { toast } from '@/components/Toast';
 import { deleteMyAccount, getMyName, phoneEnabled, supportId, useSecureStatus, useSecureVersion, isLinkedDevice, unlinkThisDevice } from '@/data/secure/sync';
 import * as Clipboard from 'expo-clipboard';
-import { SUPPORT_EMAIL, SUPPORT_PHONE } from '@/data/security';
+import { GUIDE_URL, SUPPORT_EMAIL } from '@/data/security';
 import { lockNow } from '@/components/PrivacyGuard';
 
 const FIELDS: { k: 'phone' | 'address' | 'location'; icon: IconName; label: string; hint: string; opts: string[] }[] = [
@@ -203,9 +203,11 @@ export default function MeScreen() {
         {!!supportId() && <Pressable onPress={() => { Clipboard.setStringAsync(supportId()!); toast('Support ID copied'); }} accessibilityRole="button" accessibilityHint="Copies your support ID">
           <T variant="muted">Support ID: <T variant="strong">{supportId()}</T> (tap to copy). Give this if you contact support.</T>
         </Pressable>}
-        <Pressable onPress={() => Alert.alert('Contact support', `Email ${SUPPORT_EMAIL} or call or text (929) 260-1089.${supportId() ? ` Mention your support ID, ${supportId()}.` : ''}`, [
+        <Pressable onPress={() => Linking.openURL(GUIDE_URL)} accessibilityRole="link" accessibilityHint="Opens the how-to guide in your browser" style={{ paddingVertical: 6 }}>
+          <T variant="strong" style={{ color: c.pine }}>How to use the app</T>
+        </Pressable>
+        <Pressable onPress={() => Alert.alert('Contact support', `Email ${SUPPORT_EMAIL}.${supportId() ? ` Mention your support ID, ${supportId()}.` : ''}`, [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Call or text', onPress: () => Linking.openURL(`tel:${SUPPORT_PHONE}`) },
           { text: 'Email', onPress: () => Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('It’s a Lifestyle support')}&body=${encodeURIComponent(supportId() ? `Support ID: ${supportId()}\n\n` : '')}`) },
         ])} accessibilityRole="button" style={{ paddingVertical: 6 }}>
           <T variant="strong" style={{ color: c.pine }}>Contact support</T>

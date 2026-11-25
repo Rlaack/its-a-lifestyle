@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Linking, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from './Icon';
@@ -10,6 +10,7 @@ import { useTheme } from '@/theme/theme';
 import { toast } from '@/components/Toast';
 import { RelayError } from '@/data/secure/client';
 import { AgreeRow } from './AgreeRow';
+import { GUIDE_URL } from '@/data/security';
 import { agreeToTerms, hasAgreedToTerms, getMyName, isRemoteCode, joinHoodOnline, setMyName, useSecureStatus } from '@/data/secure/sync';
 
 // Shown when you're not in any neighborhood. Deliberately neutral: it names no neighborhood.
@@ -59,6 +60,7 @@ export function JoinScreen() {
       {!others.length && <Button label="Link to my account on another phone" onPress={() => router.push('/devices?mode=receive')} />}
       {!others.length && <Button label="Restore from a recovery code" onPress={() => router.push('/backup?mode=restore')} />}
       {others.map(h => <Button key={h.id} label={`Go to ${h.name}`} onPress={() => { actions.switchHood(h.id); toast(`Switched to ${h.name}`); }} />)}
+      <Button label="New here? See how it works" onPress={() => Linking.openURL(GUIDE_URL)} />
     </ScrollView>
   );
 }

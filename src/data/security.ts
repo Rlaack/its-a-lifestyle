@@ -14,6 +14,6 @@ const SITE = 'https://www.cyber-affinity.com/its-a-lifestyle';
 export const PRIVACY_URL = `${SITE}/privacy`;
 export const TERMS_URL = `${SITE}/terms`;
 export const SUPPORT_URL = SITE;
+export const GUIDE_URL = `${SITE}/how-to`;
 
 export const SUPPORT_EMAIL = 'admin@cyber-affinity.com';
-export const SUPPORT_PHONE = '+19292601089';

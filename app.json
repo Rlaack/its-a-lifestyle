@@ -2,14 +2,14 @@
   "expo": {
     "name": "It’s a Lifestyle",
     "slug": "its-a-lifestyle",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.itsalifestyle.app",
-      "buildNumber": "16",
+      "buildNumber": "17",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Only while you record a voice message to send in a chat. Voice messages are encrypted on your phone.",
         "NSPhotoLibraryUsageDescription": "To pick a photo to send in a chat or to use as your neighborhood’s cover. Only the photos you choose are used.",
