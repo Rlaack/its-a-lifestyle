@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import * as Clipboard from 'expo-clipboard';
 import { Linking, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,6 +12,7 @@ import { toast } from '@/components/Toast';
 import { RelayError } from '@/data/secure/client';
 import { AgreeRow } from './AgreeRow';
 import { GUIDE_URL } from '@/data/security';
+import { findJoinCode, takePendingJoin, usePendingJoin } from '@/data/links';
 import { agreeToTerms, hasAgreedToTerms, getMyName, isRemoteCode, joinHoodOnline, setMyName, useSecureStatus } from '@/data/secure/sync';
 
 // Shown when you're not in any neighborhood. Deliberately neutral: it names no neighborhood.
@@ -25,6 +27,16 @@ export function JoinScreen() {
   const [busy, setBusy] = useState(false);
   const needName = status === 'ready' && !getMyName();
   const [ok, setOk] = useState(hasAgreedToTerms());
+  const pendingJoin = usePendingJoin();
+  // A join link opened the app: fill in its code (then clear it so it's used once).
+  const [linkCode, setLinkCode] = useState<string | undefined>();
+  if (pendingJoin && pendingJoin !== linkCode) { setLinkCode(pendingJoin); setCode(pendingJoin); setError(''); }
+  useEffect(() => { if (pendingJoin) takePendingJoin(); }, [pendingJoin]);
+  const onCode = (t: string) => { setError(''); setCode(t.length > 16 ? findJoinCode(t) ?? t : t); };
+  const paste = async () => {
+    const found = findJoinCode(await Clipboard.getStringAsync().catch(() => ''));
+    if (found) { setCode(found); setError(''); } else setError('There’s no join code on your clipboard. Copy the code or the whole invite, then tap Paste.');
+  };
   const join = async () => {
     if (!code.trim()) return setError('Enter the join code a neighbor gave you.');
     if (!ok) return setError('Confirm you’re 18 or older and agree to the terms.');
@@ -47,9 +59,12 @@ export function JoinScreen() {
     <ScrollView style={{ backgroundColor: c.surface }} contentContainerStyle={[styles.wrap, { paddingTop: insets.top + 60 }]} keyboardShouldPersistTaps="handled">
       <View style={[styles.mark, { backgroundColor: c.pineSoft }]}><Icon name="home2" size={32} color={c.pine} /></View>
       <Text style={[styles.h1, { color: c.ink }]}>Join your neighborhood</Text>
-      <T variant="muted">Neighborhoods are invite-only. Enter the join code a neighbor gave you, or open their invite link.</T>
-      <TextInput value={code} onChangeText={t => { setCode(t); setError(''); }} placeholder="ABCD-EFGH-JKLM" placeholderTextColor={c.muted} autoCapitalize="characters" autoCorrect={false}
-        style={[styles.input, { borderColor: c.line, backgroundColor: c.card, color: c.ink }]} accessibilityLabel="Join code" onSubmitEditing={join} />
+      <T variant="muted">Neighborhoods are invite-only. Tap the invite link a neighbor sent you, or paste or type their join code.</T>
+      <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <TextInput value={code} onChangeText={onCode} placeholder="ABCD-EFGH-JKLM" placeholderTextColor={c.muted} autoCapitalize="characters" autoCorrect={false}
+          style={[styles.input, { flex: 1, borderColor: c.line, backgroundColor: c.card, color: c.ink }]} accessibilityLabel="Join code" onSubmitEditing={join} />
+        <Button label="Paste" onPress={paste} />
+      </View>
       {needName && <TextInput value={myName} onChangeText={setMyNameInput} placeholder="Your name (what neighbors see)" placeholderTextColor={c.muted} maxLength={40}
         style={[styles.input, { borderColor: c.line, backgroundColor: c.card, color: c.ink, fontSize: 16, letterSpacing: 0, fontFamily: fonts.body }]} accessibilityLabel="Your name" />}
       {!!error && <Text style={{ fontFamily: fonts.bodySemi, color: c.ember }}>{error}</Text>}

@@ -44,7 +44,7 @@ function CreatePlan() {
   const [multi, setMulti] = useState<'one' | 'several'>(editing?.end ? 'several' : 'one');
   const [time, setTime] = useState(editing?.time ? parseTime(editing.time, spec.when.kind === 'datetime' ? spec.when.defaultTime : '22:00') : spec.when.kind === 'datetime' ? spec.when.defaultTime : '22:00');
   const [nowWhen, setNowWhen] = useState<'Now' | 'Next hour' | 'Tonight'>('Now');
-  const [range, setRange] = useState<[ISODate | null, ISODate | null]>(editing?.end ? [isoOf(editing), editing.end] : [null, null]);
+  const [range, setRange] = useState<[ISODate | null, ISODate | null]>(editing?.challenge ? [editing.challenge.start, editing.challenge.end] : editing?.end ? [isoOf(editing), editing.end] : [null, null]);
   const [pollKind, setPollKind] = useState<'date' | 'yesno' | 'choice'>('date');
   const [pollDates, setPollDates] = useState<ISODate[]>([]);
   const [closes, setCloses] = useState<ISODate | null>(null);
@@ -78,7 +78,11 @@ function CreatePlan() {
   const [chUnit, setChUnit] = useState(srcCh?.unit ?? tpl.unit ?? '');
   const [chLevels, setChLevels] = useState<ChallengeLevel[]>(srcCh?.levels ?? tpl.levels);
   const [chTasks, setChTasks] = useState((srcCh?.tasks ?? tpl.tasks ?? []).map(x => `${x.name} = ${x.pts}`).join('\n'));
-  const [chSignup, setChSignup] = useState<ISODate | null>(null);
+  const [chSignup, setChSignup] = useState<ISODate | null>(editing?.challenge?.signupBy ?? null);
+  // Editing a challenge: once anyone has logged, the scoring rules stay as they were so no one's points change.
+  // Once it has started, its first day stays put.
+  const scoreLocked = !!editing?.challenge?.log.length;
+  const startedOn = editing?.challenge && editing.challenge.start <= today ? editing.challenge.start : null;
   const [chTeamsOn, setChTeamsOn] = useState<'none' | 'teams'>(srcCh?.teams ? 'teams' : 'none');
   const [chTeamNames, setChTeamNames] = useState(srcCh?.teams?.names.join(', ') ?? 'Team 1, Team 2');
   const [chAssign, setChAssign] = useState<ChallengeTeams['assign']>(srcCh?.teams?.assign ?? 'choose');
@@ -132,6 +136,8 @@ function CreatePlan() {
       if (chLevels.some(l => !l.name.trim())) return fail('Give every effort level a name.');
       if (chTeamsOn === 'teams' && teamNames.length < 2) return fail('Name at least two teams, separated by commas.');
       if (chSignup && range[1] && chSignup > range[1]) return fail('Sign-up has to close before the challenge ends.');
+      if (startedOn && range[0] !== startedOn) return fail(`It already started, so it has to start ${prettyDate(startedOn)}. You can change the last day.`);
+      if (editing && range[1] && range[1] < today) return fail('Pick a last day that’s today or later.');
     }
     if (kind === 'mealtrain' && !mtFor.trim()) return fail('Add who the meals are for.');
     if (spec.place && place === 'Other' && !placeText.trim() && !addr.trim()) return fail('Say where it is, or add an address.');
@@ -187,6 +193,12 @@ function CreatePlan() {
         audience: p.audience, invited: p.invited, excluded: p.excluded, note: p.note, route: p.route ?? editing.route,
         end: p.end, mapAddress: p.mapAddress,
       };
+      if (kind === 'challenge' && editing.challenge && p.challenge) {
+        const was = editing.challenge, now = p.challenge;
+        next.challenge = { ...was, start: now.start, end: now.end, signupBy: now.signupBy,
+          ...(scoreLocked ? {} : { mode: now.mode, per: now.per, unit: now.unit, levels: now.levels, tasks: now.tasks, counts: now.counts }) };
+        next.going = editing.going; next.rsvp = editing.rsvp;
+      }
       if (!p.end) delete next.end;
       if (!p.mapAddress) delete next.mapAddress;
       actions.editPlan(next);
@@ -206,7 +218,7 @@ function CreatePlan() {
     : kind === 'surprise' ? 'Pick the guest of honor. They won’t see the plan, its chat or any reminders.' : 'Everyone except the neighbors you pick';
 
   return (
-    <Screen sheet title={editing ? 'Edit plan' : src ? 'Copy a plan' : kind === 'beacon' ? 'Light a beacon' : `New ${t.label.toLowerCase()}`} right={<IconButton name="x" label="Cancel" onPress={() => router.back()} />}>
+    <Screen sheet title={editing ? (kind === 'challenge' ? 'Edit challenge' : 'Edit plan') : src ? 'Copy a plan' : kind === 'beacon' ? 'Light a beacon' : `New ${t.label.toLowerCase()}`} right={<IconButton name="x" label="Cancel" onPress={() => router.back()} />}>
       {src && !editing && <T variant="muted">Copied from “{src.title}”. Pick new dates, then change anything else.</T>}
       {editing && <T variant="muted">Sign-ups, RSVPs and the chat stay as they are.</T>}
       <Field label={spec.titleLabel}>
@@ -237,7 +249,7 @@ function CreatePlan() {
       )}
       {spec.when.kind === 'range' && (
         <Field label="Dates" hint={range[0] && range[1] ? `${prettyDate(range[0])} to ${prettyDate(range[1])} · ${daysBetween(range[0], range[1])} days` : range[0] ? 'Now tap the last day.' : 'Tap the first day, then the last day.'}>
-          <DatePicker mode="range" value={range} onChange={setRange} min={today} />
+          <DatePicker mode="range" value={range} onChange={setRange} min={startedOn ?? today} />
         </Field>
       )}
       {kind === 'poll' && <>
@@ -255,6 +267,8 @@ function CreatePlan() {
 
       {/* ---------- challenge specifics ---------- */}
       {kind === 'challenge' && <>
+        {scoreLocked && <T variant="muted">People have already logged, so the scoring stays as it is. You can still change the name, dates, sign-up deadline, who can see it and the details.</T>}
+        {!scoreLocked && <>
         <Field label="Kind of challenge" hint={tpl.blurb}>
           <Chips>{(Object.keys(TEMPLATES) as ChallengeMode[]).map(m => <Pick key={m} label={TEMPLATES[m].label} on={chMode === m} onPress={() => pickMode(m)} />)}</Chips>
         </Field>
@@ -302,12 +316,14 @@ function CreatePlan() {
         {chMode === 'checkin' && (
           <Field label="Points per day checked in"><Chips>{[1, 2, 3].map(n => <Pick key={n} label={String(n)} on={chLevels[0]?.pts === n} onPress={() => setChLevels([{ name: 'Done', pts: n }])} />)}</Chips></Field>
         )}
+        </>}
         <T variant="muted">{rulesText(draftCh)}. {example}</T>
 
         <Field label="Sign up by" hint={chSignup ? `Sign-up closes ${prettyDate(chSignup, { weekday: 'long', month: 'long', day: 'numeric' })}.` : range[0] ? `Not set: sign-up closes when it starts, ${prettyDate(range[0])}.` : 'Pick the challenge dates first.'}>
           {range[0] && range[1] && <DatePicker mode="single" value={chSignup} onChange={setChSignup} min={today} max={range[1]} />}
         </Field>
 
+        {!editing && <>
         <Field label="Teams" hint={chTeamsOn === 'none' ? 'Everyone for themselves, plus a total for the whole group.' : chAssign === 'choose' ? 'People pick their team when they sign up, like Boys vs Girls.' : chAssign === 'random' ? 'You split everyone evenly at random with one tap, any time.' : 'You put each person on a team from the leaderboard.'}>
           <Segmented small options={[['none', 'No teams'], ['teams', 'Teams']]} value={chTeamsOn} onChange={setChTeamsOn} />
           {chTeamsOn === 'teams' && <>
@@ -319,6 +335,7 @@ function CreatePlan() {
         <Field label="Are you taking part?" hint={chIn === 'in' && chTeamsOn === 'teams' && chAssign === 'choose' ? 'You’ll pick your team and sign up from the challenge page.' : undefined}>
           <Segmented small options={[['in', 'Yes, sign me up'], ['out', 'Just organizing']]} value={chIn} onChange={setChIn} />
         </Field>
+        </>}
       </>}
 
       {/* ---------- meal train specifics ---------- */}

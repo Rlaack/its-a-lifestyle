@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
+import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Icon } from './Icon';
@@ -7,6 +7,7 @@ import { TopoBackground } from './TopoBackground';
 import type { IconName } from '@/theme/paths';
 import { fonts, radius, toneColors, type Tone } from '@/theme/tokens';
 import { useTheme } from '@/theme/theme';
+import { useStore } from '@/data/store';
 
 /* ---------- text ---------- */
 export function T({ children, style, variant = 'body', numberOfLines }: {
@@ -181,10 +182,15 @@ export const initials = (n: string) => n === 'You' ? 'ME' : n.replace(/^The /, '
 
 export function Avatar({ name, size = 26, ring = true }: { name: string; size?: number; ring?: boolean }) {
   const { c } = useTheme();
-  const [fg, bg] = toneColors(c, toneFor(name));
+  const pic = useStore(s => s.pics[name]);
+  const [fg, bg] = toneColors(c, pic?.tone ?? toneFor(name));
+  const box = { width: size, height: size, borderRadius: size / 2, borderWidth: ring ? 2 : 0, borderColor: c.card };
+  if (pic?.uri) return <Image source={{ uri: pic.uri }} accessibilityLabel={name} style={[box, { backgroundColor: bg }]} />;
   return (
-    <View accessibilityLabel={name} style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: bg, alignItems: 'center', justifyContent: 'center', borderWidth: ring ? 2 : 0, borderColor: c.card }}>
-      <Text style={{ fontFamily: fonts.bodyBold, fontSize: size * 0.36, color: fg }}>{initials(name)}</Text>
+    <View accessibilityLabel={name} style={[box, { backgroundColor: bg, alignItems: 'center', justifyContent: 'center' }]}>
+      {pic?.emoji
+        ? <Text style={{ fontSize: size * 0.52, lineHeight: size * 0.66 }}>{pic.emoji}</Text>
+        : <Text style={{ fontFamily: fonts.bodyBold, fontSize: size * 0.36, color: fg }}>{initials(name)}</Text>}
     </View>
   );
 }

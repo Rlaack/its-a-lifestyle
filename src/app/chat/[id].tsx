@@ -21,7 +21,7 @@ import { fonts, toneColors, type Tone } from '@/theme/tokens';
 import { useTheme } from '@/theme/theme';
 import { ENCRYPTION_LIVE, NOT_ENCRYPTED_WARNING } from '@/data/security';
 import { useHoodPaused } from '@/components/PlanNotice';
-import { accountForName, isBlocked, report, reportTarget, sendGroupAttachment, sendGroupChat, sendGroupLocation, sendSecure, sendSecureAttachment, sendSecureLocation, setBlocked, useSecureVersion } from '@/data/secure/sync';
+import { accountForName, isBlocked, reactToMessage, report, reportTarget, sendGroupAttachment, sendGroupChat, sendGroupLocation, sendSecure, sendSecureAttachment, sendSecureLocation, setBlocked, useSecureVersion } from '@/data/secure/sync';
 
 type Rich = { f: string; gone?: boolean; mid?: string; status?: 'sending' | 'sent' | 'failed'; t?: string; type?: 'photo' | 'file' | 'loc' | 'voice'; src?: string; uri?: string; alt?: string; name?: string; size?: string; dur?: string; geo?: string; r?: Record<string, string[]> };
 const fmtSize = (b: number) => (b < 1e6 ? `${Math.max(1, Math.round(b / 1e3))} KB` : `${(b / 1e6).toFixed(1)} MB`);
@@ -43,6 +43,13 @@ export default function ChatScreen() {
   if (!chat) return null;
   const dm = chat.members === 2;
   const encrypted = !!chat.secure || !!chat.shared;
+  // Reactions work in every chat: encrypted ones send them to everyone in it; the sample chats stay on this phone.
+  const react = (i: number, e: string) => {
+    const m = chat.msgs[i] as Rich;
+    if (encrypted && m?.mid) reactToMessage(chat, m.mid, e); else actions.reactMessage(chat.id, i, e);
+  };
+  // Someone you blocked: their messages are hidden here too, not just new ones.
+  const fromBlocked = (m: Message) => { const f = (m as Rich).f; if (!f || f === 'You' || f === 'sys') return false; const a = accountForName(f, chat); return !!a && isBlocked(a); };
   const blockedHere = !!chat.secure && isBlocked(chat.secure.account);
   // Long-press a neighbor's message: report it to the neighborhood's owners, or block them.
   const moderate = (msg: Rich) => {
@@ -51,7 +58,7 @@ export default function ChatScreen() {
     if (!acct || who === 'You') return;
     const target = reportTarget(acct);
     const block = { text: isBlocked(acct) ? `Unblock ${who}` : `Block ${who}`, style: 'destructive' as const, onPress: () => {
-      const on = !isBlocked(acct); setBlocked(acct, on, who); toast(on ? `Blocked ${who}. You won’t get their messages.` : `Unblocked ${who}.`);
+      const on = !isBlocked(acct); setBlocked(acct, on, who); toast(on ? `Blocked ${who}. Their messages are hidden and they can’t message you.` : `Unblocked ${who}.`);
     } };
     const buttons = [
       ...(target && !target.iAmOwner && target.ownersOther.length ? [{ text: 'Report to owners', onPress: () => {
@@ -135,6 +142,7 @@ export default function ChatScreen() {
   ];
 
   const renderItem = ({ item: m, index: i }: { item: Message; index: number }) => {
+    if (fromBlocked(m)) return null;
     if (m.f === 'sys') return <Text style={[styles.sys, { color: c.muted }]}>{'t' in m ? m.t : ''}</Text>;
     if (m.f === 'key') {
       const who = (m as { who: string }).who;
@@ -163,8 +171,8 @@ export default function ChatScreen() {
     const what = msg.gone ? `${msg.type === 'photo' ? 'Photo' : msg.type === 'voice' ? 'Voice message' : 'File'}, not restored` : msg.type === 'photo' ? `Photo${msg.t ? `, ${msg.t}` : ''}` : msg.type === 'voice' ? `Voice message${msg.dur ? `, ${msg.dur}` : ''}`
       : msg.type === 'file' ? `File, ${msg.name ?? ''}` : msg.type === 'loc' ? 'Approximate location' : msg.t ?? '';
     const a11yLabel = `${me ? 'You' : msg.f}: ${what}${me && msg.status === 'sending' ? ', sending' : ''}`;
-    const canModerate = encrypted && !me;
-    const a11yActions = [...(canModerate ? [{ name: 'moderate', label: 'Report or block' }] : []), ...(!encrypted ? [{ name: 'react', label: 'React' }] : [])];
+    const canModerate = encrypted && !me && !!accountForName(msg.f, chat);
+    const a11yActions = [{ name: 'react', label: 'React' }, ...(canModerate ? [{ name: 'moderate', label: 'Report or block' }] : [])];
     const onA11yAction = (e: { nativeEvent: { actionName: string } }) => {
       if (e.nativeEvent.actionName === 'moderate') moderate(msg);
       if (e.nativeEvent.actionName === 'react') setReactFor(reactFor === i ? null : i);
@@ -172,9 +180,9 @@ export default function ChatScreen() {
     const hasInner = !msg.gone && (msg.type === 'voice' || msg.type === 'file' || (msg.type === 'loc' && !!msg.geo));
     return (
       <View style={{ alignSelf: me ? 'flex-end' : 'flex-start', maxWidth: '80%', alignItems: me ? 'flex-end' : 'flex-start', gap: 3 }}>
-        <Pressable onPress={() => { if (!encrypted) setReactFor(reactFor === i ? null : i); }} onLongPress={encrypted && !me ? () => moderate(msg) : undefined}
+        <Pressable onPress={() => setReactFor(reactFor === i ? null : i)} onLongPress={() => setReactFor(i)} delayLongPress={300}
           accessible={!hasInner} accessibilityLabel={hasInner ? undefined : a11yLabel} accessibilityActions={hasInner ? undefined : a11yActions} onAccessibilityAction={onA11yAction}
-          accessibilityHint={hasInner ? undefined : canModerate ? 'Swipe up for report or block' : !encrypted ? 'Double-tap to react' : undefined}
+          accessibilityHint={hasInner ? undefined : canModerate ? 'Double-tap to react. Swipe up for report or block' : 'Double-tap to react'}
           style={[styles.bubble, media && { padding: 4 }, me ? { backgroundColor: c.pine, borderColor: c.pine } : { backgroundColor: c.card, borderColor: c.line }]}>
           {!me && chat.members > 2 && <Text style={{ fontFamily: fonts.bodyBold, fontSize: 11, color: nameColor, paddingHorizontal: media ? 8 : 0 }}>{msg.f}</Text>}
           {msg.type === 'photo' && (msg.uri
@@ -199,14 +207,15 @@ export default function ChatScreen() {
         )}
         {reactFor === i && (
           <View style={[styles.reactbar, { backgroundColor: c.card, borderColor: c.line }]}>
-            {CHAT_REACTIONS.map(e => <Pressable key={e} onPress={() => { actions.reactMessage(chat.id, i, e); setReactFor(null); }} accessibilityRole="button" accessibilityLabel={`React with ${e}`} style={styles.reactBtn}><Text style={{ fontSize: 20 }}>{e}</Text></Pressable>)}
+            {CHAT_REACTIONS.map(e => <Pressable key={e} onPress={() => { react(i, e); setReactFor(null); }} accessibilityRole="button" accessibilityLabel={`React with ${e}`} style={styles.reactBtn}><Text style={{ fontSize: 20 }}>{e}</Text></Pressable>)}
             <Pressable onPress={() => setPanel('react')} accessibilityRole="button" accessibilityLabel="More reactions" style={styles.reactBtn}><Icon name="plus" size={16} color={c.muted} /></Pressable>
+            {canModerate && <Pressable onPress={() => { setReactFor(null); moderate(msg); }} accessibilityRole="button" accessibilityLabel={`Report or block ${msg.f}`} style={[styles.reactBtn, { width: 'auto', paddingHorizontal: 8 }]}><Text style={{ fontFamily: fonts.bodySemi, fontSize: 13, color: c.ember }}>Report or block</Text></Pressable>}
           </View>
         )}
         {reactions.length > 0 && (
           <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
             {reactions.map(([e, l]) => (
-              <Pressable key={e} onPress={() => actions.reactMessage(chat.id, i, e)} accessibilityRole="button" accessibilityLabel={`${e} reaction, ${l.length}${l.includes('You') ? ', including you' : ''}`} style={[styles.react, { backgroundColor: l.includes('You') ? c.pineSoft : c.card, borderColor: l.includes('You') ? c.pine : c.line }]}>
+              <Pressable key={e} onPress={() => react(i, e)} accessibilityRole="button" accessibilityLabel={`${e} reaction, ${l.length}${l.includes('You') ? ', including you' : ''}`} style={[styles.react, { backgroundColor: l.includes('You') ? c.pineSoft : c.card, borderColor: l.includes('You') ? c.pine : c.line }]}>
                 <Text style={{ fontSize: 12.5, color: c.ink }}>{e} {l.length}</Text>
               </Pressable>
             ))}
@@ -269,7 +278,7 @@ export default function ChatScreen() {
       }} onCancel={() => setPanel('none')} />}
       {panel === 'emoji' && <EmojiPicker onPick={e => setDraft(d => d + e)} />}
       {panel === 'react' && reactFor !== null && (
-        <EmojiPicker heading="Pick a reaction" onCancel={() => setPanel('none')} onPick={e => { actions.reactMessage(chat.id, reactFor, e); setReactFor(null); setPanel('none'); }} />
+        <EmojiPicker heading="Pick a reaction" onCancel={() => setPanel('none')} onPick={e => { react(reactFor, e); setReactFor(null); setPanel('none'); }} />
       )}
 
       {chat.system || blockedHere ? (

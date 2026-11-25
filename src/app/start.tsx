@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { StyleSheet, Text, TextInput } from 'react-native';
+import { useEffect, useState } from 'react';
+import * as Clipboard from 'expo-clipboard';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Button, Screen, Section, Segmented, T } from '@/components/ui';
 import { actions } from '@/data/store';
@@ -10,6 +11,7 @@ import { toast } from '@/components/Toast';
 import { RelayError } from '@/data/secure/client';
 import { useBillingOn } from '@/data/billing';
 import { AgreeRow } from '@/components/AgreeRow';
+import { findJoinCode, takePendingJoin, usePendingJoin } from '@/data/links';
 
 // Start a neighborhood (you become its owner and get a join code to share), or with ?mode=join,
 // join another one with an invite code.
@@ -29,6 +31,16 @@ export default function StartNeighborhood() {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const needName = online && !getMyName();
+  const pendingJoin = usePendingJoin();
+  // A join link opened the app: fill in its code (then clear it so it's used once).
+  const [linkCode, setLinkCode] = useState<string | undefined>();
+  if (joining && pendingJoin && pendingJoin !== linkCode) { setLinkCode(pendingJoin); setCode(pendingJoin); setError(''); }
+  useEffect(() => { if (joining && pendingJoin) takePendingJoin(); }, [joining, pendingJoin]);
+  const onCode = (t: string) => { setError(''); setCode(t.length > 16 ? findJoinCode(t) ?? t : t); };
+  const paste = async () => {
+    const found = findJoinCode(await Clipboard.getStringAsync().catch(() => ''));
+    if (found) { setCode(found); setError(''); } else setError('There’s no join code on your clipboard. Copy the code or the whole invite, then tap Paste.');
+  };
   const nameOk = () => { if (!needName) return true; if (!myName.trim()) { setError('Add the name neighbors will see.'); return false; } setMyName(myName); return true; };
 
   const join = async () => {
@@ -73,9 +85,12 @@ export default function StartNeighborhood() {
   return (
     <Screen back title={joining ? 'Join a neighborhood' : 'Start a neighborhood'}>
       {joining && <>
-        <T variant="muted">Ask a neighbor who’s already in for the invite code.</T>
+        <T variant="muted">Tap the invite link a neighbor sent you, or paste or type their join code.</T>
         <Section title="Invite code">
-          <TextInput value={code} onChangeText={t => { setCode(t); setError(''); }} placeholder="ABCD-EFGH-JKLM" placeholderTextColor={c.muted} autoCapitalize="characters" autoCorrect={false} style={input} accessibilityLabel="Invite code" />
+          <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+            <TextInput value={code} onChangeText={onCode} placeholder="ABCD-EFGH-JKLM" placeholderTextColor={c.muted} autoCapitalize="characters" autoCorrect={false} style={[input, { flex: 1 }]} accessibilityLabel="Invite code" />
+            <Button label="Paste" onPress={paste} />
+          </View>
         </Section>
         {!online && <T variant="muted">Connecting… joining needs a connection.</T>}
       </>}

@@ -1,12 +1,14 @@
 import { useSyncExternalStore } from 'react';
+import { connectLink } from '../links';
 import { AppState } from 'react-native';
 import Crypto, { CryptoErrors } from '../../../modules/lifestyle-crypto';
 import { actions, getState, mutate, onHoodChange, onMessagesExpired, subscribeStore, type HoodChange } from '../store';
 import { toast } from '../../components/Toast';
 import { attFor, incomingMsg, localUri, outgoingMsg, tooBigText, type Outgoing } from './attachments';
-import type { Chat, Member, Message, Plan } from '../types';
+import type { Chat, Member, Message, Pic, Plan } from '../types';
+import { SAMPLE_MODE } from '../store';
 import { enablePush, listenForWakeups } from './push';
-import { rotateMyGroupKeys, rotateAfterDeviceRemoved, chatGroupsForSync, mergeChatGroups, onMyMirror, sendGroupTimer, hoodGroupId, setHoodGidLookup, announceMeta, catchUpAll, resetGroups, sendReport, requestGroupKey, sendOwnerSecret, resendGroupKeys, dropHoodGroup, flushOutbox, groupState, initGroups, loadGroupState, onGroupKey, onGroupMessage, sayHello, syncHoodGroup, type Group, type OutboxItem } from './groups';
+import { rotateMyGroupKeys, rotateAfterDeviceRemoved, chatGroupsForSync, mergeChatGroups, onMyMirror, sendGroupTimer, hoodGroupId, setHoodGidLookup, announceMeta, catchUpAll, resetGroups, sendReport, requestGroupKey, sendOwnerSecret, resendGroupKeys, dropHoodGroup, flushOutbox, groupState, initGroups, loadGroupState, onGroupKey, onGroupMessage, sayHello, sendGroupReaction, sendMyPicture, syncHoodGroup, validEmoji, type Group, type OutboxItem, type SharedPic } from './groups';
 import {
   confirmPhone, createRemoteHood, ensureRegistered, findByPhone, joinRemoteHood, leaveRemoteHood, looksLikeRemoteCode,
   deleteEverything, forgetSessionCache, backupSecrets, uploadBackup, deleteBackup, fetchBackup, republishKeysAfterRestore, newRecoveryCode, isRecoveryCode, onAccountClosed, newTransfer, uploadTransfer, transferStatus, downloadTransfer, finishTransfer, onHoodMoved, setLiveCodeLookup, moveRemoteHood, ensureAccessKey, getMyAccessKey, refreshMyHoodProfile, setAccessKeyLookup, normalizePhone, PHONE_ENABLED, receive, removeRemoteMember, updateRemoteMeta, type HoodMeta, RelayError, remoteHood, removePhone, sendText, startPhoneVerification, type HoodMember,
@@ -29,7 +31,9 @@ export type Contact = { account: string; name: string; identityKey?: string; ver
 /** `code` is the code this phone joined with and stays its local key; `live` is the current code after an owner changed it. */
 type SavedHood = { code: string; name: string; ownerSecret?: string; live?: string };
 type Saved = { v: 1; agreed?: boolean; myName: string | null; myPhone?: string | null; contacts: Contact[]; chats: Chat[]; hoods?: SavedHood[];
-  groups?: Group[]; outbox?: OutboxItem[]; hoodData?: Record<string, { plans: Plan[]; chats: Chat[] }>; cur?: string; blocked?: string[]; accessKeys?: Record<string, string> };
+  groups?: Group[]; outbox?: OutboxItem[]; hoodData?: Record<string, { plans: Plan[]; chats: Chat[] }>; cur?: string; blocked?: string[]; accessKeys?: Record<string, string>;
+  /** My picture as shared, and neighbors' pictures by account (with the name they had). */
+  myPic?: SharedPic; pics?: Record<string, { name: string; pic: SharedPic }> };
 export type SecureStatus = 'unavailable' | 'starting' | 'ready' | 'offline' | 'closed';
 
 const VAULT = 'chats-v1';
@@ -49,6 +53,8 @@ const hoodMeta: Record<string, HoodMeta> = {};
 let blocked: string[] = [];
 /** Other people's access keys (learned from their messages and neighborhood profiles): needed to send them sealed messages. */
 let accessKeys: Record<string, string> = {};
+let myPic: SharedPic | undefined;
+let pics: Record<string, { name: string; pic: SharedPic }> = {};
 let savedCur: string | undefined;
 let started = false;
 let generation = 0; // a new start (after deleting the account) stops the old message loop
@@ -151,7 +157,7 @@ async function writeVault() {
       hoodData[h.code] = d ? { plans: d.plans, chats: d.chats.filter(c => c.shared?.plan || c.system) } : savedHoodData?.[h.code] ?? { plans: [], chats: [] };
     }
     const { groups, outbox } = groupState();
-    const data: Saved = { v: 1, agreed, myName, myPhone, contacts, hoods, groups, outbox, hoodData, cur: st.cur, blocked, accessKeys,
+    const data: Saved = { v: 1, agreed, myName, myPhone, contacts, hoods, groups, outbox, hoodData, cur: st.cur, blocked, accessKeys, myPic, pics,
       chats: st.chats.filter(c => c.secure || (c.shared && !c.shared.plan)) };
     try { await Crypto!.vaultWrite(VAULT, JSON.stringify(data)); } catch (e) { console.warn('Could not save encrypted chats', e); }
     shareStateWithMyDevices();
@@ -223,6 +229,8 @@ export async function startSecureMessaging() {
     onOwnerSecret,
     onReport,
     isBlocked: a => blocked.includes(a),
+    myPic: () => myPic,
+    onProfile,
     onMetaChanged: async () => { await refreshHoods(false).catch(() => {}); },
   });
   onHoodChange((id, ch) => { onMyHoodChange(id, ch); });
@@ -242,6 +250,9 @@ export async function startSecureMessaging() {
       savedCur = saved.cur;
       blocked = saved.blocked ?? [];
       accessKeys = saved.accessKeys ?? {};
+      myPic = saved.myPic; pics = saved.pics ?? {};
+      showPic('You', myPic);
+      for (const p of Object.values(pics)) showPic(p.name, p.pic);
       loadGroupState(saved);
       const ids = new Set(saved.chats.map(c => c.id));
       // Anything still "sending" when the app last closed didn't finish: show it as not sent.
@@ -316,6 +327,10 @@ async function pollOnce() {
       continue;
     }
     const pl = r.payload;
+    if (pl.kind === 'react') {
+      if (validEmoji(pl.e)) { actions.reactById(chatIdFor(r.from), pl.mid, contact?.name ?? hoodNameFor(r.from) ?? 'Neighbor', pl.e, pl.on !== false); save(); }
+      continue;
+    }
     if (pl.kind !== 'text') continue;
     if (pl.timer !== undefined) {
       if (pl.timer === 'Off' || pl.timer === '1 day' || pl.timer === '1 week') { ensureChatFor(r.from); actions.setChatTimer(chatIdFor(r.from), pl.timer, contact?.name ?? hoodNameFor(r.from) ?? 'Your neighbor'); }
@@ -356,7 +371,7 @@ export async function myConnectCode(): Promise<string | null> {
 /** The same code as a link you can text to someone. Opening it connects you (not verified in person). */
 export async function myInviteLink(): Promise<string | null> {
   const code = await myConnectCode();
-  return code ? `itsalifestyle://connect?code=${encodeURIComponent(code)}` : null;
+  return code ? connectLink(code) : null;
 }
 
 export type ConnectResult = { ok: true; chatId: string; name: string } | { ok: false; reason: string };
@@ -703,6 +718,16 @@ export async function sendSecure(chatId: string, text: string, retryMid?: string
   }
 }
 
+/** Adds or takes back my reaction on a message, here and for everyone in the chat. */
+export function reactToMessage(chat: Chat, mid: string, e: string) {
+  const m = chat.msgs.find(x => 'mid' in x && x.mid === mid) as { r?: Record<string, string[]> } | undefined;
+  const on = !(m?.r?.[e] ?? []).includes('You');
+  actions.reactById(chat.id, mid, 'You', e, on);
+  save();
+  if (chat.shared) return sendGroupReaction(chat, mid, e, on);
+  if (chat.secure && Crypto) sendPayload(chat.secure.account, { v: 1, kind: 'react', id: Crypto.randomId(), mid, e, on }).catch(() => toast('Couldn’t send your reaction. Check your connection.'));
+}
+
 /** Changes disappearing messages for a chat on this phone and everyone else's in it. */
 export async function setChatDisappearing(chat: Chat, value: string) {
   actions.setChatTimer(chat.id, value);
@@ -764,19 +789,20 @@ export function reportTarget(account: string): ReportTarget {
   }
   return null;
 }
-export function report(target: NonNullable<ReportTarget>, r: { about: string; aboutName: string; kind: 'message' | 'plan'; text: string; where: string }) {
+export function report(target: NonNullable<ReportTarget>, r: { about: string; aboutName: string; kind: 'message' | 'plan' | 'picture'; text: string; where: string }) {
   sendReport(target.code, target.ownersOther, r);
 }
 
-function onReport(code: string, from: string, r: { about: string; aboutName: string; kind: 'message' | 'plan'; text: string; where: string }) {
+function onReport(code: string, from: string, r: { about: string; aboutName: string; kind: 'message' | 'plan' | 'picture'; text: string; where: string }) {
   if (!ownersOf(hoodMeta[code], hoodMembers[code] ?? []).includes(myAccount ?? '')) return; // only owners keep reports
   const list = hoodMembers[code] ?? [];
   const by = list.find(m => m.account === from)?.name ?? 'A neighbor';
   const about = list.find(m => m.account === r.about)?.name ?? r.aboutName;
   const hood = hoods.find(h => h.code === code);
+  const what = r.kind === 'plan' ? 'a plan' : r.kind === 'picture' ? 'the profile picture' : 'a message';
   actions.appendChat(`r-${code}`, { id: `reports-${code}`, name: `Reports · ${hood?.name ?? 'neighborhood'}`, members: 1, system: true, icon: 'shield',
     msgs: [{ f: 'sys', t: 'Reports from members come here, only to owners. To act on one, remove the person from the neighborhood page.' }] },
-    { f: 'sys', t: `${by} reported ${r.kind === 'plan' ? 'a plan' : 'a message'} by ${about} (${String(r.where).slice(0, 80)}): “${String(r.text).slice(0, 500)}” Support ID of ${about}: ${supportId(r.about) ?? 'unknown'}. For serious problems, send this to admin@cyber-affinity.com.` });
+    { f: 'sys', t: `${by} reported ${what} ${r.kind === 'picture' ? 'of' : 'by'} ${about} (${String(r.where).slice(0, 80)}): “${String(r.text).slice(0, 500)}” Support ID of ${about}: ${supportId(r.about) ?? 'unknown'}. For serious problems, send this to admin@cyber-affinity.com.` });
   save();
 }
 
@@ -800,7 +826,7 @@ async function restartFresh() {
   myAccount = null; myName = null; myPhone = null; contacts = []; hoods = []; blocked = []; myDeviceId = 1; lastSharedState = ''; agreed = false;
   for (const k of Object.keys(hoodMembers)) delete hoodMembers[k];
   for (const k of Object.keys(hoodMeta)) delete hoodMeta[k];
-  savedHoodData = {}; savedCur = undefined; accessKeys = {};
+  savedHoodData = {}; savedCur = undefined; accessKeys = {}; myPic = undefined; pics = {};
   resetGroups();
   actions.resetAll();
   setStatus('starting');
@@ -1017,6 +1043,54 @@ async function refreshBackup() {
 }
 
 export const looksLikeRecoveryCode = isRecoveryCode;
+
+/* ---------- pictures ---------- */
+const TONES = ['pine', 'ember', 'plum', 'sky'];
+/** Only what a picture may contain: a known color, a short emoji, an attachment reference. */
+function cleanPic(p: SharedPic): SharedPic {
+  const out: SharedPic = {};
+  if (typeof p.tone === 'string' && TONES.includes(p.tone)) out.tone = p.tone;
+  if (typeof p.emoji === 'string' && p.emoji.length <= 8 && !/[A-Za-z0-9<>&"'\\/]/.test(p.emoji)) out.emoji = p.emoji;
+  const a = p.att;
+  if (a && typeof a === 'object' && /^[0-9a-f]{32}$/.test(String(a.id)) && /^[0-9a-f]{64}$/.test(String(a.digest)) && typeof a.key === 'string') out.att = { id: a.id, key: a.key, digest: a.digest };
+  return out;
+}
+/** Shows a picture: color and emoji right away; a photo once it's downloaded and decrypted. */
+function showPic(name: string, p: SharedPic | undefined) {
+  if (!p || (!p.tone && !p.emoji && !p.att)) return actions.setPic(name, null);
+  const base: Pic = { ...(p.tone ? { tone: p.tone as Pic['tone'] } : {}), ...(p.emoji ? { emoji: p.emoji } : {}) };
+  if (!p.att) return actions.setPic(name, base);
+  const have = getState().pics[name];
+  if (have?.att?.digest === p.att.digest && have.uri) return;
+  downloadPhoto(p.att).then(uri => actions.setPic(name, { ...base, att: p.att, uri }))
+    .catch(e => { if (__DEV__) console.log('[pic] download failed', String(e)); actions.setPic(name, base.tone || base.emoji ? base : null); });
+}
+function onProfile(account: string, name: string, p: SharedPic) {
+  const pic = cleanPic(p);
+  if (pic.tone || pic.emoji || pic.att) pics[account] = { name, pic }; else delete pics[account];
+  showPic(name, pic);
+  save();
+}
+/** Sets my picture (null: back to initials). A photo is encrypted on this phone and uploaded; only my
+ *  neighbors and group chats get its key. */
+export async function setMyPicture(p: { tone?: Pic['tone']; emoji?: string; photoUri?: string; keepPhoto?: boolean } | null): Promise<void> {
+  const base: SharedPic = p ? { ...(p.tone ? { tone: p.tone } : {}), ...(p.emoji ? { emoji: p.emoji } : {}) } : {};
+  // Demo data and Expo Go: nothing to share, just show it here.
+  const keptUri = p?.keepPhoto ? getState().pics.You?.uri : undefined;
+  if (SAMPLE_MODE || !Crypto || status !== 'ready') { actions.setPic('You', p ? { ...base as Pic, ...(p.photoUri || keptUri ? { uri: p.photoUri ?? keptUri } : {}) } : null); return; }
+  let shared = base, uri: string | undefined;
+  if (p?.keepPhoto && myPic?.att) { shared = { ...base, att: myPic.att }; uri = keptUri; }
+  if (p?.photoUri) {
+    const up = await uploadPhoto(p.photoUri, true); // kept about a year, like a neighborhood cover
+    shared = { ...base, att: { id: up.att.id, key: up.att.key, digest: up.att.digest } }; uri = up.uri;
+  }
+  myPic = shared.tone || shared.emoji || shared.att ? shared : undefined;
+  actions.setPic('You', myPic ? { ...(shared as Pic), ...(uri ? { uri } : {}) } : null);
+  sendMyPicture(shared);
+  save();
+}
+/** Whether this neighbor has a photo I could report. */
+export const hasPhoto = (name: string) => !!getState().pics[name]?.uri;
 
 /** A new (empty) phone: restores the account from a recovery code. Neighbors' phones start fresh
  *  conversations with it, and they resend recent messages and plans. */

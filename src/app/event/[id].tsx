@@ -106,7 +106,7 @@ export default function EventScreen() {
       })()}
       {p.host === 'You' && !past && (
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          {(p.type !== 'poll' && p.type !== 'mealtrain' && p.type !== 'challenge') && <Button grow label="Edit plan" onPress={() => router.push(`/create/${p.type}?edit=${p.id}`)} />}
+          {(p.type !== 'poll' && p.type !== 'mealtrain') && <Button grow label={p.type === 'challenge' ? 'Edit challenge' : 'Edit plan'} onPress={() => router.push(`/create/${p.type}?edit=${p.id}`)} />}
           <Button grow kind="danger" label={p.live ? 'Put it out' : 'Cancel plan'} onPress={() => Alert.alert(p.live ? 'Put out this beacon?' : `Cancel ${p.title}?`,
             'It disappears for everyone, along with its chat. This can’t be undone.',
             [{ text: 'Keep it', style: 'cancel' }, { text: p.live ? 'Put it out' : 'Cancel plan', style: 'destructive', onPress: () => { actions.cancelPlan(p.id); router.back(); toast(p.live ? 'Beacon is out.' : 'Plan cancelled.'); } }])} />

@@ -10,7 +10,7 @@ export const SENSITIVE_INFO_NOTICE =
   'Not for official or sensitive information. Don’t share operational, controlled or classified details, deployment dates or duty locations here. Follow your organization’s rules for those.';
 
 /** Where people reach us: support questions, abuse reports, App Review. */
-const SITE = 'https://www.cyber-affinity.com/its-a-lifestyle';
+export const SITE = 'https://www.cyber-affinity.com/its-a-lifestyle';
 export const PRIVACY_URL = `${SITE}/privacy`;
 export const TERMS_URL = `${SITE}/terms`;
 export const SUPPORT_URL = SITE;

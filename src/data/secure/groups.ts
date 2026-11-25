@@ -36,7 +36,12 @@ type Body =
   | { t: 'rotate' }                                                 // a member removed a device: everyone switches to a new key
   | { t: 'owner'; secret: string }                                  // the owner secret, to a new co-owner (1:1)
   | { t: 'meta' }
-  | { t: 'report'; about: string; aboutName: string; kind: 'message' | 'plan'; text: string; where: string }; // to owners only                                                  // "the neighborhood's settings or members changed"                                                // "I couldn't read your last group message: send your key again"
+  | { t: 'react'; plan?: string; mid: string; e: string; on: boolean }  // a reaction to a group or plan chat message
+  | { t: 'profile'; pic: SharedPic }                              // my picture changed (empty: back to initials)
+  | { t: 'report'; about: string; aboutName: string; kind: 'message' | 'plan' | 'picture'; text: string; where: string }; // to owners only                                                  // "the neighborhood's settings or members changed"                                                // "I couldn't read your last group message: send your key again"
+
+/** A picture as it travels: color and emoji, or an encrypted photo's key (never a local file path). */
+export type SharedPic = { tone?: string; emoji?: string; att?: { id: string; key: string; digest: string } };
 
 export type OutboxItem = { group: string; body: Body; onlyTo?: string[]; noMirror?: boolean };
 
@@ -49,8 +54,10 @@ type Ctx = {
   save: () => void;
   onOwnerSecret: (hoodCode: string, secret: string) => void;
   onMetaChanged: (hoodCode: string) => Promise<void>;
-  onReport: (hoodCode: string, from: string, r: { about: string; aboutName: string; kind: 'message' | 'plan'; text: string; where: string }) => void;
+  onReport: (hoodCode: string, from: string, r: { about: string; aboutName: string; kind: 'message' | 'plan' | 'picture'; text: string; where: string }) => void;
   isBlocked: (account: string) => boolean;
+  myPic: () => SharedPic | undefined;
+  onProfile: (account: string, name: string, pic: SharedPic) => void;
 };
 
 let ctx: Ctx | null = null;
@@ -145,7 +152,7 @@ async function deliver(item: OutboxItem) {
 /** Keeps what I sent, so someone who couldn't read it (a missed key) gets it again. Chat messages are
  *  de-duplicated by their ID on arrival, and plan changes are safe to apply twice. */
 function remember(item: OutboxItem) {
-  if (!['hello', 'owner', 'meta', 'report', 'rotate'].includes((item.body as { t: string }).t)) recent[item.group] = [...(recent[item.group] ?? []), item].slice(-RECENT_MAX);
+  if (!['hello', 'owner', 'meta', 'report', 'rotate', 'profile'].includes((item.body as { t: string }).t)) recent[item.group] = [...(recent[item.group] ?? []), item].slice(-RECENT_MAX);
 }
 
 async function send(item: OutboxItem) {
@@ -301,6 +308,8 @@ function onMyOp(hoodId: string, op: PlanOp, prev?: Plan) {
 async function catchUp(g: Group, newcomer: string) {
   if (!g.hood || !ctx) return;
   const hoodId = ctx.hoodIdOf(g.hood);
+  const pic = ctx.myPic();
+  if (pic) await send({ group: g.id, body: { t: 'profile', pic }, onlyTo: [newcomer], noMirror: true });
   for (const p of actions.plansOf(hoodId).filter(x => x.host === 'You')) {
     const aud = audienceOf(p, g.hood);
     if (aud && !aud.includes(newcomer)) continue;
@@ -320,7 +329,7 @@ export function sendOwnerSecret(code: string, to: string[], secret: string) {
   if (to.length) send({ group: hoodGroupId(code), body: { t: 'owner', secret }, onlyTo: to });
 }
 /** Sends a report to a neighborhood's owners (1:1 encrypted to each owner). */
-export function sendReport(code: string, owners: string[], r: { about: string; aboutName: string; kind: 'message' | 'plan'; text: string; where: string }) {
+export function sendReport(code: string, owners: string[], r: { about: string; aboutName: string; kind: 'message' | 'plan' | 'picture'; text: string; where: string }) {
   send({ group: hoodGroupId(code), body: { t: 'report', ...r, text: r.text.slice(0, 2000) }, onlyTo: owners });
 }
 /** Resets everything this module holds (after deleting the account). */
@@ -329,6 +338,11 @@ export function resetGroups() { groups = []; outbox = []; for (const k of Object
 /** Tells everyone the settings or member list changed, so they refresh now (and rotate keys if someone left). */
 export function announceMeta(code: string) {
   send({ group: hoodGroupId(code), body: { t: 'meta' } });
+}
+
+/** Tells everyone I share a neighborhood or group chat with that my picture changed. */
+export function sendMyPicture(pic: SharedPic) {
+  for (const g of groups) send({ group: g.id, body: { t: 'profile', pic } });
 }
 
 /** Ask everyone already in the neighborhood for its current plans (after I join). */
@@ -399,6 +413,18 @@ function showChatMessage(hoodId: string | null, chat: Chat, who: string, body: E
     ? incomingMsg(att, who, body.mid, body.text)
     : { f: who, t: String(body.text).slice(0, 4000), mid: body.mid }) as Message);
   if (att) downloadPhoto(att).then(uri => { actions.patchChatMsg(chat.id, body.mid, { uri }); ctx?.save(); }).catch(e => dbg('photo download failed', String(e)));
+}
+
+/** A reaction: one emoji, nothing else (no letters or markup). */
+export const validEmoji = (e: unknown): e is string => typeof e === 'string' && e.length > 0 && e.length <= 8 && !/[A-Za-z0-9<>&"'\\/\s]/.test(e);
+
+/** Adds or takes back my reaction on a group or plan chat message, for everyone in the chat. */
+export function sendGroupReaction(chat: Chat, mid: string, e: string, on: boolean) {
+  if (!chat.shared || !ctx) return;
+  const item = chatItem(chat, mid, '');
+  if (!item) return;
+  const plan = (item.body as { plan?: string }).plan;
+  send({ ...item, body: { t: 'react', ...(plan ? { plan } : {}), mid, e, on } });
 }
 
 /** Shares a rounded location (about 1 km) in a group or plan chat. */
@@ -479,6 +505,13 @@ export async function onGroupMessage(from: string, p: GroupPayload) {
     return;
   }
   const who = ctx.nameOf(from, g.hood) ?? p.from?.name?.slice(0, 40) ?? 'Neighbor';
+  if (body.t === 'react') {
+    if (ctx.isBlocked(from) || typeof body.mid !== 'string' || !validEmoji(body.e)) return;
+    const chatId = g.kind === 'hood' ? (body.plan ? `c-${body.plan}` : null) : groupChatId(g.id);
+    if (chatId) { actions.reactById(chatId, body.mid, who, body.e, body.on !== false); ctx.save(); }
+    return;
+  }
+  if (body.t === 'profile') { if (!ctx.isBlocked(from) && body.pic && typeof body.pic === 'object') ctx.onProfile(from, who, body.pic); return; }
 
   if (g.kind === 'hood' && g.hood) {
     const hoodId = ctx.hoodIdOf(g.hood);

@@ -88,3 +88,6 @@ export type Me = {
   name: string; street: string; remindDefault: string; vis: Visibility; visPeople?: Record<string, string[]>;
   calPref?: 'phone' | 'google' | null; sec: Security; devices: Device[];
 };
+
+/** A person's picture: initials in a chosen color, an emoji, or a photo (encrypted; `uri` is this phone's decrypted copy). */
+export type Pic = { tone?: 'pine' | 'ember' | 'plum' | 'sky'; emoji?: string; att?: { id: string; key: string; digest: string }; uri?: string };

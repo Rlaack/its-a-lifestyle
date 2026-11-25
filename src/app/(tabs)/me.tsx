@@ -46,7 +46,12 @@ export default function MeScreen() {
   return (
     <Screen title="Me">
       <View style={{ flexDirection: 'row', gap: 14, alignItems: 'center' }}>
-        <Avatar name="You" size={72} ring={false} />
+        <Pressable onPress={() => router.push('/picture')} accessibilityRole="button" accessibilityLabel="Change your picture">
+          <Avatar name="You" size={72} ring={false} />
+          <View style={{ position: 'absolute', right: -2, bottom: -2, width: 26, height: 26, borderRadius: 13, backgroundColor: c.pine, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: c.surface }}>
+            <Icon name="plus" size={14} color={c.onPine} />
+          </View>
+        </Pressable>
         <View>
           <T variant="heading">{myName ?? 'Your name'}</T>
           <T variant="muted">{[hood.name, me.street].filter(Boolean).join(' · ')}</T>

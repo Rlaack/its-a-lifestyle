@@ -35,7 +35,9 @@ export type GroupPayload = { v: 1; kind: 'group'; group: string; id: string; sen
 /** Between my own devices only: a copy of something I sent, or my shared account state. */
 export type SyncState = { name: string | null; contacts: unknown[]; hoods: unknown[]; blocked: string[]; accessKeys: Record<string, string>; chatGroups: { id: string; name: string; members: string[] }[] };
 export type SyncPayload = { v: 1; kind: 'sync'; id: string; from?: From; to?: string; inner?: TextPayload | GroupPayload; state?: SyncState };
-export type Payload = TextPayload | GroupKeyPayload | GroupPayload | SyncPayload;
+/** A reaction to a message in a 1:1 chat (on: added, or false: taken back). Older app versions ignore it. */
+export type ReactPayload = { v: 1; kind: 'react'; id: string; mid: string; e: string; on: boolean; from?: From };
+export type Payload = TextPayload | GroupKeyPayload | GroupPayload | SyncPayload | ReactPayload;
 
 export type Received =
   | { ok: true; from: string; fromDevice: number; payload: Payload; relayTs: number; viaGroupKey: boolean }
@@ -248,6 +250,7 @@ export async function receive(): Promise<Received[]> {
         (payload.kind === 'text' && typeof payload.text === 'string' && !viaGroupKey)
         || (payload.kind === 'gkey' && typeof payload.group === 'string' && typeof payload.key === 'string' && !viaGroupKey)
         || (payload.kind === 'group' && typeof payload.group === 'string' && typeof payload.id === 'string')
+        || (payload.kind === 'react' && typeof payload.mid === 'string' && typeof payload.e === 'string' && !viaGroupKey)
         || (payload.kind === 'sync' && !viaGroupKey && m.from === me?.name && m.fromDevice !== me?.deviceId));
       if (!valid) throw new Error('bad payload');
       // A group key must be stored before the next message in this batch is decrypted: the

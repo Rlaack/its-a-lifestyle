@@ -1,13 +1,15 @@
 import { ENCRYPTION_LIVE } from '@/data/security';
 import { useState } from 'react';
-import { Alert, Platform, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Platform, Pressable, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
+import QRCode from 'react-native-qrcode-svg';
+import { joinLink } from '@/data/links';
 import { Icon } from '@/components/Icon';
 import { LakeLogo } from '@/components/LakeLogo';
 import { Avatar, Button, Chip, IconButton, ListBox, Notice, Pick, Row, Screen, Section, Segmented, T } from '@/components/ui';
-import { accountInCurrentHood, changeInviteCode, leaveHoodOnline, openSecureChat } from '@/data/secure/sync';
+import { accountInCurrentHood, changeInviteCode, hasPhoto, isBlocked, leaveHoodOnline, openSecureChat, report, reportTarget, setBlocked } from '@/data/secure/sync';
 import { actions, hoodCount, useStore } from '@/data/store';
 import type { Member } from '@/data/types';
 import { fonts } from '@/theme/tokens';
@@ -55,7 +57,26 @@ export default function NeighborhoodScreen() {
 
   const invite = hood.invite ?? hood.code;
   const copy = async () => { await Clipboard.setStringAsync(invite); toast(`Copied ${invite}.`); };
-  const share = () => Share.share({ message: `Join ${hood.name} on It’s a Lifestyle. Your join code is ${invite}.${hood.remote ? '' : ' It works for 7 days.'}` });
+  // A real neighborhood gets a tappable link (opens the app, or a page with the code and the App Store button).
+  const share = () => Share.share({ message: hood.remote
+    ? `Join ${hood.name} on It’s a Lifestyle. Tap to join:\n${joinLink(invite)}\n\nOr open the app, tap Join and enter ${invite}.`
+    : `Join ${hood.name} on It’s a Lifestyle. Your join code is ${invite}. It works for 7 days.` });
+  const [showQr, setShowQr] = useState(false);
+  // Tap a neighbor's photo: report it to the owners, or block them.
+  const aboutPhoto = (name: string) => {
+    const acct = accountInCurrentHood(name);
+    if (!acct) return;
+    const target = reportTarget(acct);
+    const blocked = isBlocked(acct);
+    Alert.alert(`${name}’s picture`, target?.iAmOwner ? `You’re an owner: if it’s inappropriate, you can remove ${name} from ${hood.name}.` : `A report goes to the owners of ${hood.name}, encrypted. ${name} isn’t told who reported it.`, [
+      ...(target && !target.iAmOwner && target.ownersOther.length ? [{ text: 'Report to owners', onPress: () => {
+        report(target, { about: acct, aboutName: name, kind: 'picture', text: 'Profile picture', where: hood.name });
+        toast(`Reported to the owners of ${hood.name}.`);
+      } }] : []),
+      { text: blocked ? `Unblock ${name}` : `Block ${name}`, style: 'destructive' as const, onPress: () => { setBlocked(acct, !blocked, name); toast(blocked ? `Unblocked ${name}.` : `Blocked ${name}.`); } },
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
+  };
   const [changing, setChanging] = useState(false);
   const newCode = () => {
     if (!hood.remote) { actions.newJoinCode(); return toast('New code made. The old one stopped working.'); }
@@ -99,6 +120,13 @@ export default function NeighborhoodScreen() {
             <Button label="Copy" onPress={copy} />
           </View>
           <Button kind="primary" icon="send" label="Send an invite link" onPress={share} />
+          <Button label={showQr ? 'Hide the QR code' : 'Show a QR code'} onPress={() => setShowQr(x => !x)} />
+          {showQr && <>
+            <View accessible accessibilityRole="image" accessibilityLabel="QR code to join this neighborhood" style={{ alignItems: 'center', padding: 16, backgroundColor: '#FFFFFF', borderRadius: 18, borderWidth: 1, borderColor: c.line }}>
+              <QRCode value={joinLink(invite)} size={220} color="#1D2C25" backgroundColor="#FFFFFF" ecl="M" />
+            </View>
+            <T variant="muted" style={{ textAlign: 'center' }}>A neighbor points their iPhone camera at this, taps the link, and joins.</T>
+          </>}
         </> : <T variant="muted">Right now only people the owners choose can invite. Ask an owner for an invite.</T>}
       </Section>
 
@@ -162,7 +190,9 @@ export default function NeighborhoodScreen() {
             const owner = hood.owners.includes(m.n), isMe = m.n === 'You';
             return (
               <Row key={m.n} first={i === 0}>
-                <Avatar name={m.n} size={40} ring={false} />
+                {!isMe && hasPhoto(m.n)
+                  ? <Pressable onPress={() => aboutPhoto(m.n)} accessibilityRole="button" accessibilityHint="Report or block"><Avatar name={m.n} size={40} ring={false} /></Pressable>
+                  : <Avatar name={m.n} size={40} ring={false} />}
                 <View style={{ flex: 1, gap: 2 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                     <T variant="strong" style={{ fontSize: 15 }}>{m.n}</T>

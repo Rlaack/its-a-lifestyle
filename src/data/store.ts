@@ -1,6 +1,6 @@
 import { useRef, useSyncExternalStore } from 'react';
 import sample from './sample.json';
-import type { Calendar, Chat, Me, Member, Message, Neighborhood, Plan, Reactions } from './types';
+import type { Calendar, Chat, Me, Member, Message, Neighborhood, Pic, Plan, Reactions } from './types';
 import { ENCRYPTION_LIVE, NOT_ENCRYPTED_WARNING } from './security';
 import { canLog, phaseOf, prettyISO, signupOpen, splitTeams } from './challenge';
 import { applyOp, opPlanId, type PlanOp } from './planOps';
@@ -14,6 +14,8 @@ type HoodData = { hood: Neighborhood; plans: Plan[]; chats: Chat[]; cals: Calend
 export type State = HoodData & {
   me: Me; favorites: string[]; groups: { name: string; members: string[] }[]; verified: string[];
   cur: string; hoodList: { id: string; name: string }[]; stash: Record<string, HoodData>;
+  /** Pictures by display name ('You' is mine). People without one show their initials. */
+  pics: Record<string, Pic>;
 };
 
 /** The sample neighborhood (the prototype's data) exists only in development builds.
@@ -49,12 +51,13 @@ const sampleState = (): State => ({
   cur: 'sample',
   hoodList: [{ id: 'sample', name: (sampleData.hood as { name: string }).name }],
   stash: {},
+  pics: {},
 });
 const emptyHood: Neighborhood = { name: '', about: '', owner: '', owners: [], code: '', places: [], inviters: 'everyone', joined: false, more: 0, members: [], extra: [] };
 const emptyState = (): State => ({
   me: { ...(sampleData.me as Me), street: '', devices: [], visPeople: {}, calPref: null },
   hood: emptyHood, plans: [], chats: [], cals: [],
-  favorites: [], groups: [], verified: [], cur: '', hoodList: [], stash: {},
+  favorites: [], groups: [], verified: [], cur: '', hoodList: [], stash: {}, pics: {},
 });
 
 let state: State = SAMPLE_MODE ? sampleState() : emptyState();
@@ -278,6 +281,10 @@ export const actions = {
   },
   // You can only remove your own entries.
   removeEntry(id: string, entryId: string) { runOp({ t: 'unlog', id, entryId }); },
+  /** Sets or clears someone's picture (by display name; 'You' for mine). */
+  setPic(name: string, pic: Pic | null) {
+    set(s => { const pics = { ...s.pics }; if (pic && (pic.tone || pic.emoji || pic.uri)) pics[name] = pic; else delete pics[name]; return { ...s, pics }; });
+  },
   addPlan(p: Plan) {
     set(s => ({ ...s, plans: [p, ...s.plans] }));
     opListener?.(state.cur, { t: 'plan', plan: p });
@@ -303,7 +310,9 @@ export const actions = {
         const incoming = op.plan;
         const i = plans.findIndex(x => x.id === incoming.id);
         if (incoming.host !== who) return plans; // only the host can publish their plan
-        return i < 0 ? [incoming, ...plans] : plans.map(x => (x.id === incoming.id ? { ...incoming, rsvp: x.rsvp, remind: x.remind, calCopy: x.calCopy } : x));
+        // A host's edit to a challenge changes its settings only: sign-ups, teams and everyone's log stay as this phone has them.
+        const keep = (x: Plan): Plan => (x.challenge && incoming.challenge ? { going: x.going, challenge: { ...incoming.challenge, log: x.challenge.log, teams: x.challenge.teams } } as Plan : {} as Plan);
+        return i < 0 ? [incoming, ...plans] : plans.map(x => (x.id === incoming.id ? { ...incoming, ...keep(x), rsvp: x.rsvp, remind: x.remind, calCopy: x.calCopy } : x));
       }
       if (op.t === 'cancel') return plans.filter(x => !(x.id === op.id && x.host === who));
       if (!plans.some(x => x.id === opPlanId(op))) return plans;
@@ -410,6 +419,20 @@ export const actions = {
     set(s => ({
       ...s,
       chats: s.chats.map(c => (c.id !== chatId ? c : { ...c, msgs: c.msgs.map((m, k) => (k !== i || !('t' in m || 'type' in m) ? m : { ...m, r: toggleReaction((m as { r?: Reactions }).r, e) })) })),
+    }));
+  },
+  /** Sets one person's reaction on a message (by its ID). `who` is 'You' or a neighbor's name. */
+  reactById(chatId: string, mid: string, who: string, e: string, on: boolean) {
+    set(s => ({
+      ...s,
+      chats: s.chats.map(c => (c.id !== chatId ? c : { ...c, msgs: c.msgs.map(m => {
+        if (!('mid' in m) || m.mid !== mid) return m;
+        const r = { ...((m as { r?: Reactions }).r ?? {}) };
+        const list = (r[e] ?? []).filter(x => x !== who);
+        if (on) list.push(who);
+        if (list.length) r[e] = list; else delete r[e];
+        return { ...m, r };
+      }) })),
     }));
   },
   openChatFor(planId: string): string {
