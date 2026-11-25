@@ -89,6 +89,38 @@ db.exec(`
     PRIMARY KEY (lookup, account), FOREIGN KEY (lookup) REFERENCES hoods(lookup) ON DELETE CASCADE);
 `);
 
+// The neighborhood board: plans for everyone in a neighborhood, sealed with a secret only members hold,
+// so someone who joins later sees them at once. `author` and `editors` are account IDs; the server checks
+// them to decide who may change a plan, but can't read the plans. `ops` are the changes anyone makes
+// (RSVPs, sign-ups, challenge logs), replayed in order on top of the plan.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS board_items (lookup TEXT NOT NULL, id TEXT NOT NULL, author TEXT NOT NULL, editors TEXT NOT NULL,
+    sealed TEXT NOT NULL, updated INTEGER NOT NULL, PRIMARY KEY (lookup, id), FOREIGN KEY (lookup) REFERENCES hoods(lookup) ON DELETE CASCADE);
+  CREATE TABLE IF NOT EXISTS board_ops (seq INTEGER PRIMARY KEY AUTOINCREMENT, lookup TEXT NOT NULL, plan TEXT NOT NULL, author TEXT NOT NULL,
+    sealed TEXT NOT NULL, created INTEGER NOT NULL, FOREIGN KEY (lookup, plan) REFERENCES board_items(lookup, id) ON DELETE CASCADE ON UPDATE CASCADE);
+  CREATE INDEX IF NOT EXISTS board_ops_plan ON board_ops (lookup, plan, seq);
+`);
+const BOARD_ITEM_MAX = 98_304, BOARD_OP_MAX = 4096, BOARD_ITEMS_PER_HOOD = 300, BOARD_OPS_PER_PLAN = 5000, BOARD_KEEP_MS = 400 * 864e5;
+const PLAN_ID = /^[A-Za-z0-9_-]{1,64}$/;
+const bdq = {
+  items: db.prepare('SELECT id, author, editors, sealed, updated FROM board_items WHERE lookup = ?'),
+  ops: db.prepare('SELECT seq, plan, author, sealed FROM board_ops WHERE lookup = ? AND seq > ? ORDER BY seq LIMIT 5000'),
+  item: db.prepare('SELECT author, editors FROM board_items WHERE lookup = ? AND id = ?'),
+  count: db.prepare('SELECT COUNT(*) AS n FROM board_items WHERE lookup = ?'),
+  opCount: db.prepare('SELECT COUNT(*) AS n FROM board_ops WHERE lookup = ? AND plan = ?'),
+  insert: db.prepare('INSERT INTO board_items VALUES (?,?,?,?,?,?)'),
+  update: db.prepare('UPDATE board_items SET sealed = ?, editors = ?, updated = ? WHERE lookup = ? AND id = ?'),
+  remove: db.prepare('DELETE FROM board_items WHERE lookup = ? AND id = ?'),
+  addOp: db.prepare('INSERT INTO board_ops (lookup, plan, author, sealed, created) VALUES (?,?,?,?,?) RETURNING seq'),
+  move: db.prepare('UPDATE board_items SET lookup = ? WHERE lookup = ?'),
+  moveOps: db.prepare('UPDATE board_ops SET lookup = ? WHERE lookup = ?'),
+  old: db.prepare('DELETE FROM board_items WHERE updated < ?'),
+};
+const isEditors = (e) => Array.isArray(e) && e.length <= 20 && e.every(a => typeof a === 'string' && ACCOUNT.test(a));
+function boardMember(lookup, me) {
+  if (!LOOKUP.test(lookup) || !q.hoodIsMember.get(lookup, me.account)) throw new HttpError(404, 'not found');
+}
+
 db.exec('CREATE TABLE IF NOT EXISTS device_links (token_hash TEXT PRIMARY KEY, account TEXT NOT NULL, expires INTEGER NOT NULL)');
 const MAX_DEVICES = 3; // the phone plus 2 linked devices
 
@@ -746,6 +778,7 @@ const routes = {
       if (owner) q.ownerSet.run(newLookup, owner.owner_hash);
       for (const m of members) if (profiles[m.account]) q.hoodJoin.run(newLookup, m.account, profiles[m.account], m.joined);
       for (const b of bans) q.ban.run(newLookup, b.account);
+      bdq.move.run(newLookup, lookup); bdq.moveOps.run(newLookup, lookup); // the board's secret travels in the sealed settings
       q.forwardSet.run(lookup, forward, Date.now());
       for (const m of members) q.forwardMember.run(lookup, m.account);
       q.hoodDelete.run(lookup);
@@ -771,6 +804,54 @@ const routes = {
     if (!LOOKUP.test(lookup)) throw new HttpError(404, 'not found');
     tx(() => { q.hoodLeave.run(lookup, me.account); if (q.hoodCount.get(lookup).n === 0) q.hoodDelete.run(lookup); });
     return [204];
+  },
+
+  /* ---------- neighborhood board ---------- */
+  // Members only: every plan on the board, and the changes since `after` (a seq number).
+  'GET /v1/hoods/:lookup/board': async (req, { lookup }) => {
+    const me = auth(req); limit(`board:${me.account}`, 120);
+    boardMember(lookup, me);
+    const after = Math.max(0, Number(new URL(req.url, 'http://x').searchParams.get('after')) || 0);
+    const items = bdq.items.all(lookup).map(i => ({ ...i, editors: JSON.parse(i.editors) }));
+    return [200, { items, ops: bdq.ops.all(lookup, after) }];
+  },
+  // Post or update a plan. The first poster is its author; after that only the author or an editor the
+  // author chose may replace it, and only the author changes who the editors are.
+  'PUT /v1/hoods/:lookup/board/:id': async (req, { lookup, id }) => {
+    const me = auth(req); limit(`boardput:${me.account}`, 120);
+    boardMember(lookup, me);
+    const { sealed, editors } = await readJson(req, BOARD_ITEM_MAX + 4096);
+    if (!PLAN_ID.test(id) || !isB64(sealed, BOARD_ITEM_MAX) || (editors !== undefined && !isEditors(editors))) throw new HttpError(400, 'invalid plan');
+    const have = bdq.item.get(lookup, id);
+    if (!have) {
+      if (bdq.count.get(lookup).n >= BOARD_ITEMS_PER_HOOD) throw new HttpError(409, 'board full');
+      bdq.insert.run(lookup, id, me.account, JSON.stringify(editors ?? []), sealed, Date.now());
+      return [201];
+    }
+    const eds = JSON.parse(have.editors);
+    if (have.author !== me.account && !eds.includes(me.account)) throw new HttpError(403, 'not yours');
+    bdq.update.run(sealed, have.author === me.account && editors ? JSON.stringify(editors) : have.editors, Date.now(), lookup, id);
+    return [204];
+  },
+  // Take a plan down (cancelled): its author, or a neighborhood owner.
+  'DELETE /v1/hoods/:lookup/board/:id': async (req, { lookup, id }) => {
+    const me = auth(req); limit(`boardput:${me.account}`, 120);
+    boardMember(lookup, me);
+    const have = bdq.item.get(lookup, id);
+    if (!have) return [204];
+    if (have.author !== me.account) { const { proof } = await readJson(req); checkOwner(lookup, me, proof); }
+    bdq.remove.run(lookup, id);
+    return [204];
+  },
+  // Any member: a change to a plan (an RSVP, a sign-up, a challenge entry).
+  'POST /v1/hoods/:lookup/board/:id/ops': async (req, { lookup, id }) => {
+    const me = auth(req); limit(`boardop:${me.account}`, 300);
+    boardMember(lookup, me);
+    const { sealed } = await readJson(req);
+    if (!isB64(sealed, BOARD_OP_MAX) || !bdq.item.get(lookup, id)) throw new HttpError(400, 'invalid change');
+    if (bdq.opCount.get(lookup, id).n >= BOARD_OPS_PER_PLAN) throw new HttpError(409, 'too many changes');
+    const { seq } = bdq.addOp.get(lookup, id, me.account, sealed, Date.now());
+    return [201, { seq }];
   },
 
   /* ---------- neighborhood subscriptions ---------- */
@@ -1013,5 +1094,5 @@ if (DB_PATH !== ':memory:') { backupNow(); setInterval(backupNow, 3600_000).unre
 setInterval(() => {
   for (const { id } of q.attachOld.all(Date.now() - TTL_MS, Date.now() - KEEP_MS)) rmSync(join(ATTACH_DIR, id), { force: true });
   q.expire.run(Date.now() - TTL_MS); q.crashOld.run(Date.now() - 90 * 864e5);
-  for (const { id, parts } of q.xferOld.all(Date.now() - 3600_000)) for (let n = 0; n < parts; n++) rmSync(join(ATTACH_DIR, `xfer-${id}-${n}`), { force: true }); q.forwardExpire.run(Date.now() - 90 * 864e5); }, 3600_000).unref();
+  for (const { id, parts } of q.xferOld.all(Date.now() - 3600_000)) for (let n = 0; n < parts; n++) rmSync(join(ATTACH_DIR, `xfer-${id}-${n}`), { force: true }); q.forwardExpire.run(Date.now() - 90 * 864e5); bdq.old.run(Date.now() - BOARD_KEEP_MS); }, 3600_000).unref();
 server.listen(PORT, '0.0.0.0', () => console.log(`relay listening on ${PORT}${APNS ? ' (push on)' : ''}${SEALED ? ' (sealed sender on)' : ''}`));

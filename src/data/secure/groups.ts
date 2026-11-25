@@ -57,6 +57,9 @@ type Ctx = {
   onReport: (hoodCode: string, from: string, r: { about: string; aboutName: string; kind: 'message' | 'plan' | 'picture'; text: string; where: string }) => void;
   isBlocked: (account: string) => boolean;
   myPic: () => SharedPic | undefined;
+  /** The neighborhood board: copy a change of mine there, or read it again. */
+  toBoard: (hoodCode: string, op: PlanOp, plan: Plan, prev?: Plan) => void;
+  loadBoard: (hoodCode: string) => void;
   onProfile: (account: string, name: string, pic: SharedPic) => void;
 };
 
@@ -295,6 +298,7 @@ function onMyOp(hoodId: string, op: PlanOp, prev?: Plan) {
   const wire: PlanOp = op.t === 'plan' ? { t: 'plan', plan: planForSending(op.plan, ctx.me().name ?? 'Neighbor') } : op;
   const now = audienceOf(plan, code);
   send({ group: g.id, body: { t: 'op', op: wire }, onlyTo: now });
+  ctx.toBoard(code, op, plan, prev);
   // An edit that narrows who's invited: the people taken off get a cancel, 1:1, and nothing else.
   if (op.t === 'plan' && prev) {
     const everyone = ctx.hoodMembers(code);
@@ -321,6 +325,7 @@ const lastAsk: Record<string, number> = {};
 function askAgain(g: Group) {
   if (Date.now() - (lastAsk[g.id] ?? 0) < 60_000) return;
   lastAsk[g.id] = Date.now();
+  if (g.hood) ctx?.loadBoard(g.hood); // the board has every plan for everyone, even if its host is away
   send({ group: g.id, body: { t: 'hello' } });
 }
 

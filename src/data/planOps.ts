@@ -42,6 +42,7 @@ export function applyOp(p: Plan, op: PlanOp, who: string, opts: { authorIsHost?:
       })) };
     case 'addItem':
       if (!p.lists?.length || p.lists[p.lists.length - 1].items.length >= 200) return p;
+      if (p.lists[p.lists.length - 1].items.some(it => it.name === op.name.slice(0, 80))) return p; // already there (replayed)
       return { ...p, lists: p.lists.map((l, i) => (i === p.lists!.length - 1 ? { ...l, items: [...l.items, { name: op.name.slice(0, 80), by: op.mine ? who : null }] } : l)) };
     case 'meal':
       return { ...p, days: p.days?.map((d, a) => (a !== op.di ? d : {
@@ -108,7 +109,7 @@ type Swap = (n: string) => string;
 function mapPeople(p: Plan, f: Swap): Plan {
   const m = (l?: string[]) => l?.map(f);
   return {
-    ...p, host: f(p.host), going: p.going.map(f), maybe: m(p.maybe), invited: m(p.invited), excluded: m(p.excluded),
+    ...p, host: f(p.host), editors: m(p.editors), going: p.going.map(f), maybe: m(p.maybe), invited: m(p.invited), excluded: m(p.excluded),
     r: p.r && Object.fromEntries(Object.entries(p.r).map(([e, l]) => [e, l.map(f)])),
     lists: p.lists?.map(l => ({ ...l, items: l.items.map(it => ({ ...it, by: it.by && f(it.by) })) })),
     days: p.days?.map(d => ({ ...d, slots: d.slots.map(s => ({ ...s, by: s.by && f(s.by) })) })),
@@ -126,7 +127,8 @@ export function planForSending(p: Plan, myName: string): Plan {
   // "Your place, Elk Court" is only true on my phone. Neighbors see whose place it is, not the street:
   // the exact address goes out only if I added one on purpose.
   const where = /^Your place\b/.test(out.where) ? `${myName}’s place` : out.where;
-  return { ...out, where, rsvp: null, remind: [], calCopy: null };
+  const { bu: _local, ...sent } = { ...out, where, rsvp: null, remind: [], calCopy: null };
+  return sent;
 }
 /** For receiving: my name becomes "You", and my RSVP is worked out from the lists. */
 export function planFromSender(p: Plan, myName: string): Plan {

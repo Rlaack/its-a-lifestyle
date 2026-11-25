@@ -9,7 +9,7 @@ import { ChallengeView } from '@/components/ChallengeView';
 import { addToPhoneCalendar, calCopyOf, openInGoogleCalendar } from '@/data/calendarCopy';
 import { Avatar, AvatarStack, Button, Chip, IconButton, ListBox, Notice, Pick, Row, Screen, Section, Segmented, T } from '@/components/ui';
 import { PLAN_TYPES, POST_REACTIONS } from '@/data/planTypes';
-import { actions, audienceText, getState, isPast, slotsOf, useStore, whenText } from '@/data/store';
+import { actions, audienceText, canEdit, getState, isPast, slotsOf, useStore, whenText } from '@/data/store';
 import type { Plan } from '@/data/types';
 import { fonts, toneColors } from '@/theme/tokens';
 import { useTheme } from '@/theme/theme';
@@ -104,12 +104,12 @@ export default function EventScreen() {
           </Pressable>
         );
       })()}
-      {p.host === 'You' && !past && (
+      {canEdit(p, 'You') && !past && (
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          {(p.type !== 'poll' && p.type !== 'mealtrain') && <Button grow label={p.type === 'challenge' ? 'Edit challenge' : 'Edit plan'} onPress={() => router.push(`/create/${p.type}?edit=${p.id}`)} />}
-          <Button grow kind="danger" label={p.live ? 'Put it out' : 'Cancel plan'} onPress={() => Alert.alert(p.live ? 'Put out this beacon?' : `Cancel ${p.title}?`,
+          {!p.live && <Button grow label={p.type === 'challenge' ? 'Edit challenge' : p.type === 'poll' ? 'Edit poll' : 'Edit plan'} onPress={() => router.push(`/create/${p.type}?edit=${p.id}`)} />}
+          {p.host === 'You' && <Button grow kind="danger" label={p.live ? 'Put it out' : 'Cancel plan'} onPress={() => Alert.alert(p.live ? 'Put out this beacon?' : `Cancel ${p.title}?`,
             'It disappears for everyone, along with its chat. This can’t be undone.',
-            [{ text: 'Keep it', style: 'cancel' }, { text: p.live ? 'Put it out' : 'Cancel plan', style: 'destructive', onPress: () => { actions.cancelPlan(p.id); router.back(); toast(p.live ? 'Beacon is out.' : 'Plan cancelled.'); } }])} />
+            [{ text: 'Keep it', style: 'cancel' }, { text: p.live ? 'Put it out' : 'Cancel plan', style: 'destructive', onPress: () => { actions.cancelPlan(p.id); router.back(); toast(p.live ? 'Beacon is out.' : 'Plan cancelled.'); } }])}/>}
         </View>
       )}
     </Screen>

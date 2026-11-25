@@ -10,7 +10,7 @@ import { checkAddress } from '@/data/address';
 import { rulesText, scoreEntries, TEMPLATES } from '@/data/challenge';
 import { FORM_SPECS } from '@/data/formSpecs';
 import { PLAN_TYPES } from '@/data/planTypes';
-import { actions, getState, hoodCount, useStore } from '@/data/store';
+import { actions, canEdit, getState, hoodCount, useStore } from '@/data/store';
 import type { Audience, Challenge, ChallengeLevel, ChallengeMode, ChallengeTeams, Plan, PlanType } from '@/data/types';
 import { fonts } from '@/theme/tokens';
 import { useTheme } from '@/theme/theme';
@@ -27,7 +27,11 @@ function CreatePlan() {
   const params = useLocalSearchParams<{ type: PlanType; title?: string; date?: string; note?: string; from?: string; edit?: string }>();
   // "Copy" opens this form filled in from another plan (everything except the dates).
   // "Edit" (host only) fills in everything, dates included, and saves over the same plan.
-  const editing: Plan | undefined = params.edit ? getState().plans.find(x => x.id === params.edit && x.host === 'You') : undefined;
+  const editing: Plan | undefined = params.edit ? getState().plans.find(x => x.id === params.edit && canEdit(x, 'You')) : undefined;
+  // Polls and meal trains keep their dates once posted (votes and meal sign-ups hang on them).
+  const fixedDates = !!editing && (editing.type === 'poll' || editing.type === 'mealtrain');
+  // Only the host chooses who else can edit.
+  const iAmHost = !editing || editing.host === 'You';
   const src: Plan | undefined = editing ?? (params.from ? getState().plans.find(x => x.id === params.from) : undefined);
   const isoOf = (p: Plan) => `${p.y ?? 2026}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`;
   const kind: PlanType = src?.type ?? (params.type && PLAN_TYPES[params.type] ? params.type : 'gathering');
@@ -67,6 +71,8 @@ function CreatePlan() {
   const [mtAddr, setMtAddr] = useState(src?.address ?? '');
   const [mtDrop, setMtDrop] = useState(src?.dropoff ?? '');
   const [meals, setMeals] = useState<('Lunch' | 'Dinner')[]>(['Dinner']);
+  const [editorsOn, setEditorsOn] = useState<'me' | 'others'>(editing?.editors?.length ? 'others' : 'me');
+  const [editors, setEditors] = useState<string[]>(editing?.editors ?? []);
 
   // ---------- challenge settings ----------
   const srcCh = src?.challenge;
@@ -125,6 +131,9 @@ function CreatePlan() {
     setError('');
     const fail = (m: string) => setError(m);
     if (kind === 'poll' && !title.trim()) return fail('Write a question first.');
+    if (iAmHost && editorsOn === 'others' && !editors.length) return fail('Pick who else can edit, or choose Just me.');
+    const options = kind !== 'poll' ? [] : pollKind === 'yesno' ? ['Yes', 'No'] : pollKind === 'date' ? pollDates.map(d => prettyDate(d)) : lines(list);
+    if (!fixedDates) {
     if (spec.when.kind === 'datetime' && !multiDay && !date) return fail('Pick a date on the calendar.');
     if (multiDay && !(range[0] && range[1])) return fail('Pick the first and last day.');
     if (spec.when.kind === 'range' && !(range[0] && range[1])) return fail(kind === 'challenge' ? 'Pick the first and last day of the challenge.' : 'Pick the first and last day of the meal train.');
@@ -142,11 +151,12 @@ function CreatePlan() {
     if (kind === 'mealtrain' && !mtFor.trim()) return fail('Add who the meals are for.');
     if (spec.place && place === 'Other' && !placeText.trim() && !addr.trim()) return fail('Say where it is, or add an address.');
     if ((who === 'pick' || who === 'except') && !picked.length) return fail(who === 'except' ? 'Pick who shouldn’t see it.' : 'Pick at least one neighbor.');
-    const options = kind !== 'poll' ? [] : pollKind === 'yesno' ? ['Yes', 'No'] : pollKind === 'date' ? pollDates.map(d => prettyDate(d)) : lines(list);
     if (kind === 'poll' && options.length < 2) return fail(pollKind === 'date' ? 'Pick at least two dates to vote on.' : 'Add at least two choices, one per line.');
     if (kind === 'poll' && !closes) return fail('Pick when voting closes.');
+    }
 
-    const anchor = fromISO(spec.when.kind === 'range' || multiDay ? range[0]! : spec.when.kind === 'poll' ? closes! : date ?? today);
+    const anchor = fixedDates ? fromISO(`${editing!.y ?? 2026}-${String(editing!.m).padStart(2, '0')}-${String(editing!.d).padStart(2, '0')}`)
+      : fromISO(spec.when.kind === 'range' || multiDay ? range[0]! : spec.when.kind === 'poll' ? closes! : date ?? today);
     // A real street address beats the default "My place" pick, so the two never contradict.
     const where = place === 'Other' ? placeText.trim() : (place === 'My place' ? (addr.trim() ? '' : street ? `Your place, ${street}` : 'Your place') : place);
     const p: Plan = {
@@ -163,7 +173,7 @@ function CreatePlan() {
     if (spec.route && route.trim()) Object.assign(p, { route: route.trim(), pace: '', recurring: 'One time' });
     if (spec.list) p.lists = [{ cat: spec.list.category, items: (lines(list).length ? lines(list) : spec.list.defaults).map(name => ({ name, by: null })) }];
     if (kind === 'beacon') Object.assign(p, { live: true, going: [], rsvp: null, when: nowWhen === 'Now' ? `Now until ${formatTime(time)}` : nowWhen === 'Next hour' ? `Starting within the hour, until ${formatTime(time)}` : `Tonight until ${formatTime(time)}` });
-    if (kind === 'poll') Object.assign(p, { going: [], rsvp: null, where: '', kind: pollKind, multi: pollKind === 'date', closes: `Closes ${prettyDate(closes!)}`, options: options.map(o => ({ t: o, v: [] })) });
+    if (kind === 'poll' && !fixedDates) Object.assign(p, { going: [], rsvp: null, where: '', kind: pollKind, multi: pollKind === 'date', closes: `Closes ${prettyDate(closes!)}`, options: options.map(o => ({ t: o, v: [] })) });
     if (kind === 'challenge') {
       const n = daysBetween(range[0]!, range[1]!);
       const teams: ChallengeTeams | undefined = chTeamsOn === 'teams' ? { names: teamNames, assign: chAssign, of: {} } : undefined;
@@ -175,7 +185,7 @@ function CreatePlan() {
         challenge: { ...draftCh, start: range[0]!, end: range[1]!, signupBy: chSignup ?? range[0]!, teams } satisfies Challenge,
       });
     }
-    if (kind === 'mealtrain') {
+    if (kind === 'mealtrain' && !fixedDates) {
       const n = daysBetween(range[0]!, range[1]!);
       Object.assign(p, {
         going: [], rsvp: null, for: mtFor.trim(), where: `For ${mtFor.trim()}`, precision: 'address shown to people who sign up',
@@ -199,12 +209,16 @@ function CreatePlan() {
           ...(scoreLocked ? {} : { mode: now.mode, per: now.per, unit: now.unit, levels: now.levels, tasks: now.tasks, counts: now.counts }) };
         next.going = editing.going; next.rsvp = editing.rsvp;
       }
+      if (iAmHost) next.editors = editorsOn === 'others' ? editors.filter(n => n !== 'You') : [];
+      if (fixedDates) Object.assign(next, { y: editing.y, m: editing.m, d: editing.d, dow: editing.dow, time: editing.time, end: editing.end, where: editing.where, precision: editing.precision });
+      if (editing.type === 'mealtrain') Object.assign(next, { for: mtFor.trim() || editing.for, where: `For ${mtFor.trim() || editing.for}`, address: mtAddr.trim() || editing.address, dropoff: mtDrop.trim() || editing.dropoff, diet: list.trim() || editing.diet });
       if (!p.end) delete next.end;
       if (!p.mapAddress) delete next.mapAddress;
       actions.editPlan(next);
       router.back();
       return toast('Saved. Everyone invited sees the change.');
     }
+    if (editorsOn === 'others' && editors.length) p.editors = editors.filter(n => n !== 'You');
     actions.addPlan(p);
     router.dismissAll();
     router.push(`/event/${p.id}`);
@@ -247,12 +261,13 @@ function CreatePlan() {
           <TimeField value={time} onChange={setTime} label="Until about" />
         </Field>
       )}
-      {spec.when.kind === 'range' && (
+      {spec.when.kind === 'range' && !fixedDates && (
         <Field label="Dates" hint={range[0] && range[1] ? `${prettyDate(range[0])} to ${prettyDate(range[1])} · ${daysBetween(range[0], range[1])} days` : range[0] ? 'Now tap the last day.' : 'Tap the first day, then the last day.'}>
           <DatePicker mode="range" value={range} onChange={setRange} min={startedOn ?? today} />
         </Field>
       )}
-      {kind === 'poll' && <>
+      {fixedDates && <T variant="muted">The dates stay as posted{kind === 'poll' ? ', so votes still count' : ', so meal sign-ups stay put'}. To change them, cancel this and post a new one.</T>}
+      {kind === 'poll' && !fixedDates && <>
         <Field label="Kind of poll"><Segmented small options={[['date', 'Pick a date'], ['yesno', 'Yes or no'], ['choice', 'Choices']]} value={pollKind} onChange={setPollKind} /></Field>
         {pollKind === 'date' && (
           <Field label="Dates to vote on" hint={pollDates.length ? pollDates.map(d => prettyDate(d)).join(', ') : 'Tap every date you want neighbors to choose from.'}>
@@ -340,9 +355,9 @@ function CreatePlan() {
 
       {/* ---------- meal train specifics ---------- */}
       {kind === 'mealtrain' && <>
-        <Field label="Meals each day" hint="Most meal trains are dinner only. You can add or remove a meal on any single day after posting.">
+        {!editing && <Field label="Meals each day" hint="Most meal trains are dinner only. You can add or remove a meal on any single day after posting.">
           <Chips>{(['Lunch', 'Dinner'] as const).map(m => <Pick key={m} label={m} on={meals.includes(m)} onPress={() => setMeals(x => (x.includes(m) ? (x.length > 1 ? x.filter(y => y !== m) : x) : [...x, m]))} />)}</Chips>
-        </Field>
+        </Field>}
         <Field label="Who is it for?"><Input value={mtFor} onChangeText={setMtFor} placeholder="The Hendersons" /></Field>
         <Field label="Their address" hint="Only people who sign up for a meal will see the address."><Input value={mtAddr} onChangeText={setMtAddr} placeholder="118 Maple St" /></Field>
         <Field label="Drop-off instructions"><Input value={mtDrop} onChangeText={setMtDrop} placeholder="Cooler on the porch. Text, don’t knock." /></Field>
@@ -378,6 +393,13 @@ function CreatePlan() {
         </Chips>
         {(who === 'pick' || who === 'except') && <PeoplePicker value={picked} onChange={setPicked} except={who === 'except'} />}
       </Field>
+
+      {iAmHost && kind !== 'beacon' && (
+        <Field label="Who can edit" hint={editorsOn === 'me' ? 'Only you can change or cancel it.' : 'They can change the details, dates and who’s invited. Only you can cancel it or change who can edit.'}>
+          <Segmented small options={[['me', 'Just me'], ['others', 'Me and people I pick']]} value={editorsOn} onChange={setEditorsOn} />
+          {editorsOn === 'others' && <PeoplePicker value={editors} onChange={setEditors} summaryLabel="Can edit: " />}
+        </Field>
+      )}
 
       {spec.detailsPlaceholder && <Field label="Details (optional)"><Input multiline value={details} onChangeText={setDetails} placeholder={spec.detailsPlaceholder} /></Field>}
 

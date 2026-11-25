@@ -6,12 +6,14 @@ import { actions, getState, mutate, onHoodChange, onMessagesExpired, subscribeSt
 import { toast } from '../../components/Toast';
 import { attFor, incomingMsg, localUri, outgoingMsg, tooBigText, type Outgoing } from './attachments';
 import type { Chat, Member, Message, Pic, Plan } from '../types';
+import { planForSending, planFromSender, type PlanOp } from '../planOps';
 import { SAMPLE_MODE } from '../store';
 import { enablePush, listenForWakeups } from './push';
 import { rotateMyGroupKeys, rotateAfterDeviceRemoved, chatGroupsForSync, mergeChatGroups, onMyMirror, sendGroupTimer, hoodGroupId, setHoodGidLookup, announceMeta, catchUpAll, resetGroups, sendReport, requestGroupKey, sendOwnerSecret, resendGroupKeys, dropHoodGroup, flushOutbox, groupState, initGroups, loadGroupState, onGroupKey, onGroupMessage, sayHello, sendGroupReaction, sendMyPicture, syncHoodGroup, validEmoji, type Group, type OutboxItem, type SharedPic } from './groups';
 import {
   confirmPhone, createRemoteHood, ensureRegistered, findByPhone, joinRemoteHood, leaveRemoteHood, looksLikeRemoteCode,
   deleteEverything, forgetSessionCache, backupSecrets, uploadBackup, deleteBackup, fetchBackup, republishKeysAfterRestore, newRecoveryCode, isRecoveryCode, onAccountClosed, newTransfer, uploadTransfer, transferStatus, downloadTransfer, finishTransfer, onHoodMoved, setLiveCodeLookup, moveRemoteHood, ensureAccessKey, getMyAccessKey, refreshMyHoodProfile, setAccessKeyLookup, normalizePhone, PHONE_ENABLED, receive, removeRemoteMember, updateRemoteMeta, type HoodMeta, RelayError, remoteHood, removePhone, sendText, startPhoneVerification, type HoodMember,
+  boardGet, boardPut, boardRemove, boardAddOp, boardOpen, type BoardOp,
   uploadPhoto, downloadPhoto, isRoundedGeo, billingStatus, coverRemoteHood, onHoodPlan, sendPayload, adoptAccessKey, finishDeviceLink, forgetMyDevices, listMyDevices, mirrorToMyDevices, onDeviceRevoked, removeMyDevice, sendStateToMyDevices, startDeviceLink, type SyncPayload, type SyncState, type TextPayload } from './client';
 import { setHoodPlan } from '@/data/billing';
 
@@ -234,6 +236,8 @@ export async function startSecureMessaging() {
     isBlocked: a => blocked.includes(a),
     myPic: () => myPic,
     onProfile,
+    toBoard,
+    loadBoard: code => { loadBoard(code).catch(e => { if (__DEV__) console.log('[board] load failed', String(e)); }); },
     onMetaChanged: async () => { await refreshHoods(false).catch(() => {}); },
   });
   onHoodChange((id, ch) => { onMyHoodChange(id, ch); });
@@ -271,6 +275,7 @@ export async function startSecureMessaging() {
     return;
   }
   await refreshHoods(true);
+  for (const h of hoods) await loadBoard(h.code).catch(e => { if (__DEV__) console.log('[board] load failed', String(e)); });
   catchUpAll();
   // Reopen the neighborhood I was on last time.
   if (savedCur && savedCur !== getState().cur && getState().stash[savedCur]) actions.switchHood(savedCur);
@@ -512,6 +517,7 @@ async function onMyHoodChange(hoodId: string, ch: HoodChange) {
   const prev = hoodMeta[h.code];
   const meta: HoodMeta = { v: 1, name: hood.name, about: hood.about, places: hood.places, inviters: hood.inviters, owners,
     ...(prev?.gid ? { gid: prev.gid } : {}), // the fixed group ID must survive every settings change
+    ...(prev?.board ? { board: prev.board } : {}), // so must the board secret
     ...(cover?.kind === 'drawing' || cover?.kind === 'none' ? { cover: cover.kind } : {}),
     ...(cover?.kind === 'photo' && cover.att ? { cover: 'photo' as const, coverImg: cover.att } : {}) };
   try {
@@ -555,6 +561,12 @@ async function refreshHoods(addMissing: boolean) {
       const r = await remoteHood(h.code);
       hoodMembers[h.code] = r.members;
       hoodMeta[h.code] = r.meta;
+      // A neighborhood from before the board: an owner's phone gives it a board secret, once.
+      if (h.ownerSecret && r.meta && !r.meta.board && Crypto) {
+        const meta = { ...r.meta, board: Crypto.randomId() + Crypto.randomId() };
+        await updateRemoteMeta(h.code, meta, h.ownerSecret).then(() => { hoodMeta[h.code] = meta; r.meta = meta; announceMeta(h.code); save(); })
+          .catch(e => { if (__DEV__) console.log('[board] could not add a board secret', String(e)); });
+      }
       // My profile has no access key (made before sealed sender) or an outdated one (account switch): post it again.
       const mine = r.members.find(m => m.account === myAccount);
       if (mine && getMyAccessKey() && mine.ak !== getMyAccessKey() && myName) refreshMyHoodProfile(h.code, myName).catch(() => {});
@@ -635,8 +647,8 @@ export async function coverNeighborhood(hoodId: string): Promise<'need-plan' | '
 
 /** Creates a neighborhood on the relay. Returns its invite code (XXXX-XXXX-XXXX). */
 export async function createHoodOnline(name: string, extra: { about?: string; places?: string[]; inviters?: 'everyone' | 'chosen' } = {}): Promise<string> {
-  const { code, ownerSecret } = await createRemoteHood({ name, ...extra }, myName ?? 'Neighbor');
-  hoodMeta[code] = { v: 1, name, ...extra, owners: [myAccount!] };
+  const { code, ownerSecret, board } = await createRemoteHood({ name, ...extra }, myName ?? 'Neighbor');
+  hoodMeta[code] = { v: 1, name, ...extra, owners: [myAccount!], board };
   hoods = [...hoods, { code, name, ownerSecret }];
   hoodMembers[code] = [{ account: myAccount!, name: myName ?? 'Neighbor' }];
   syncHoodGroup(code, name, []);
@@ -657,7 +669,8 @@ export async function joinHoodOnline(code: string): Promise<string | null> {
   actions.addRemoteHood({ code: r.code, name: r.name, members: toMembers(r.members, r.meta) });
   actions.setRemoteHoodInfo(`r-${r.code}`, { ...infoOf(r.meta, r.members), invite: r.code });
   syncCoverPhoto(`r-${r.code}`, r.meta);
-  sayHello(r.code); // everyone already there sends me the plans I'm allowed to see
+  loadBoard(r.code).catch(e => { if (__DEV__) console.log('[board] load failed', String(e)); }); // every plan for everyone, right away
+  sayHello(r.code); // plans for smaller groups still come from their hosts
   enablePush().catch(() => {});
   return r.name;
 }
@@ -1054,6 +1067,70 @@ async function refreshBackup() {
 }
 
 export const looksLikeRecoveryCode = isRecoveryCode;
+
+/* ---------- the neighborhood board ---------- */
+// Plans for everyone in a neighborhood also live on the relay, sealed with the board secret (inside the
+// sealed settings, so only members have it). Someone who joins later reads them at once, with every
+// RSVP, sign-up and challenge entry, whether or not the people who posted them are online.
+const boardSeen: Record<string, number> = {}; // highest change number applied this session, per neighborhood
+const forEveryone = (p: Plan) => p.audience === 'all';
+const boardName = (code: string, account: string) => account === myAccount ? 'You'
+  : hoodMembers[code]?.find(m => m.account === account)?.name ?? contacts.find(c => c.account === account)?.name ?? 'A former neighbor';
+const boardFail = (what: string) => (e: unknown) => { if (__DEV__) console.log('[board]', what, 'failed', String(e)); };
+
+/** Copies a change I made to a plan for everyone onto the board. */
+function toBoard(code: string, op: PlanOp, plan: Plan, prev?: Plan) {
+  const secret = hoodMeta[code]?.board;
+  if (!secret || !myAccount) return;
+  const was = !!prev && forEveryone(prev), now = forEveryone(plan);
+  if (op.t === 'cancel' || (was && !now)) { if ((prev ?? plan).host === 'You') boardRemove(code, plan.id).catch(boardFail('remove')); return; }
+  if (!now) return;
+  if (op.t === 'plan') return publishToBoard(code, secret, plan);
+  boardAddOp(code, secret, plan.id, op).catch(boardFail('change'));
+}
+function publishToBoard(code: string, secret: string, plan: Plan) {
+  const accountOf = (n: string) => hoodMembers[code]?.find(m => m.name === n && m.account !== myAccount)?.account;
+  const editors = plan.host === 'You' ? (plan.editors ?? []).map(accountOf).filter((a): a is string => !!a) : undefined;
+  boardPut(code, secret, plan.id, planForSending(plan, myName ?? 'Neighbor'), editors).catch(boardFail('post'));
+}
+
+const boardLoading: Record<string, Promise<void> | undefined> = {};
+/** Reads the whole board and brings this phone's plans up to date. Also posts my own plans for everyone
+ *  that aren't on it yet (made before the board existed). */
+export function loadBoard(code: string): Promise<void> {
+  return (boardLoading[code] ??= readBoard(code).finally(() => { boardLoading[code] = undefined; }));
+}
+async function readBoard(code: string) {
+  const secret = hoodMeta[code]?.board;
+  if (!secret || !myAccount || !Crypto) return;
+  const hoodId = `r-${code}`;
+  const first = await boardGet(code, 0);
+  const ops: BoardOp[] = [...first.ops];
+  while (ops.length && ops.length % 5000 === 0) { const more = await boardGet(code, ops[ops.length - 1].seq); if (!more.ops.length) break; ops.push(...more.ops); }
+  const seen = boardSeen[code] ?? 0;
+  const mine = actions.plansOf(hoodId);
+  const items: Parameters<typeof actions.boardMerge>[1] = [];
+  for (const it of first.items) {
+    const sent = boardOpen<Plan>(secret, it.sealed);
+    if (!sent || sent.id !== it.id || typeof sent.title !== 'string') continue;
+    // Who posted it and who may edit it come from the relay's record, not from the sealed copy.
+    const plan: Plan = { ...planFromSender(sent, myName ?? ''), host: boardName(code, it.author), editors: it.editors.map(a => boardName(code, a)) };
+    if (!forEveryone(plan)) continue;
+    const have = mine.find(p => p.id === it.id);
+    const rebuild = !have || it.updated > (have.bu ?? 0);
+    // My own plan: "Alex’s place" is how neighbors see my place; on my phone it stays "Your place".
+    if (have && plan.host === 'You' && sent.where === `${myName ?? ''}’s place`) { plan.where = have.where; plan.mapAddress = have.mapAddress; }
+    const changes = ops.filter(o => o.plan === it.id && (rebuild || o.seq > seen))
+      .map(o => ({ op: boardOpen<PlanOp>(secret, o.sealed), who: boardName(code, o.author) }))
+      .filter((x): x is { op: PlanOp; who: string } => !!x.op && typeof x.op === 'object' && 'id' in x.op && x.op.id === it.id);
+    items.push({ plan, bu: it.updated, rebuild, ops: changes });
+  }
+  actions.boardMerge(hoodId, items, new Set(first.items.map(i => i.id)));
+  if (ops.length) boardSeen[code] = ops[ops.length - 1].seq;
+  // My plans for everyone that aren't on the board yet: post them now.
+  for (const p of actions.plansOf(hoodId)) if (p.host === 'You' && forEveryone(p) && !p.bu && !first.items.some(i => i.id === p.id)) publishToBoard(code, secret, p);
+  save();
+}
 
 /* ---------- pictures ---------- */
 const TONES = ['pine', 'ember', 'plum', 'sky'];

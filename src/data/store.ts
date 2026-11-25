@@ -137,6 +137,9 @@ function runOp(op: PlanOp) {
 const updatePlan = (id: string, fn: (p: Plan) => Plan) =>
   set(s => ({ ...s, plans: s.plans.map(p => (p.id === id ? fn(p) : p)) }));
 const toggleIn = (list: string[] = [], who: string) => (list.includes(who) ? list.filter(x => x !== who) : [...list, who]);
+/** The host, or someone the host made an editor. */
+export const canEdit = (p: Plan, who: string) => p.host === who || (p.editors ?? []).includes(who);
+
 const toggleReaction = (r: Reactions = {}, e: string): Reactions => ({ ...r, [e]: toggleIn(r[e], 'You') });
 /** The first calendar is the whole neighborhood's and carries its name. A custom calendar can already have
  *  that name, and plans find calendars by name, so the main one stays distinct. */
@@ -289,10 +292,11 @@ export const actions = {
     set(s => ({ ...s, plans: [p, ...s.plans] }));
     opListener?.(state.cur, { t: 'plan', plan: p });
   },
-  /** Host: save changes to a posted plan (sign-ups, RSVPs and the like are kept). */
+  /** Host or an editor: save changes to a posted plan (sign-ups, RSVPs and the like are kept). */
   editPlan(next: Plan) {
     const prev = state.plans.find(x => x.id === next.id);
-    if (!prev || prev.host !== 'You') return;
+    if (!prev || !canEdit(prev, 'You')) return;
+    if (prev.host !== 'You') { next = { ...next, host: prev.host, editors: prev.editors }; } // only the host changes who can edit
     set(s => ({ ...s, plans: s.plans.map(x => (x.id === next.id ? next : x)), chats: s.chats.map(c => (c.gid === next.id ? { ...c, name: next.title } : c)) }));
     opListener?.(state.cur, { t: 'plan', plan: next }, prev);
   },
@@ -303,20 +307,48 @@ export const actions = {
     set(s => ({ ...s, plans: s.plans.filter(x => x.id !== id), chats: s.chats.filter(c => c.gid !== id) }));
     opListener?.(state.cur, { t: 'cancel', id }, prev);
   },
+  /** The neighborhood board (plans for everyone, read from the relay). `rebuild`: take the board's copy
+   *  and replay every change on it; otherwise just apply the changes this phone hasn't seen. Plans this
+   *  phone got from the board that are no longer on it were cancelled. */
+  boardMerge(hoodId: string, items: { plan: Plan; bu: number; rebuild: boolean; ops: { op: PlanOp; who: string }[] }[], onBoard: Set<string>) {
+    const merge = (plans: Plan[]): Plan[] => {
+      let out = plans.filter(p => !(p.bu && !onBoard.has(p.id)));
+      for (const it of items) {
+        const have = out.find(p => p.id === it.plan.id);
+        let p: Plan | undefined = it.rebuild ? { ...it.plan, remind: have?.remind ?? [], calCopy: have?.calCopy ?? null } : have;
+        if (!p) continue;
+        for (const { op, who } of it.ops) if (op.t !== 'plan' && op.t !== 'cancel' && opPlanId(op) === p.id) p = applyOp(p, op, who, { authorIsHost: canEdit(p, who) });
+        const rsvp = p.going.includes('You') ? 'going' : p.maybe?.includes('You') ? 'maybe' : have?.rsvp === 'no' ? 'no' : null;
+        const next: Plan = { ...p, rsvp, bu: Math.max(it.bu, have?.bu ?? 0) };
+        out = have ? out.map(x => (x.id === next.id ? next : x)) : [next, ...out];
+      }
+      return out;
+    };
+    set(s => {
+      if (s.cur === hoodId) return { ...s, plans: merge(s.plans) };
+      const h = s.stash[hoodId];
+      return h ? { ...s, stash: { ...s.stash, [hoodId]: { ...h, plans: merge(h.plans) } } } : s;
+    });
+  },
   /** A plan or a change arrived from a neighbor (already decrypted). `who` is their name. */
   applyRemote(hoodId: string, op: PlanOp, who: string) {
     const apply = (plans: Plan[]): Plan[] => {
       if (op.t === 'plan') {
         const incoming = op.plan;
         const i = plans.findIndex(x => x.id === incoming.id);
-        if (incoming.host !== who) return plans; // only the host can publish their plan
+        const have = i < 0 ? undefined : plans[i];
+        // The host publishes and edits their plan; editors the host chose may edit it too, but the host
+        // and the editor list stay as the host set them.
+        const byEditor = !!have && incoming.host !== who && have.host === incoming.host && (have.editors ?? []).includes(who);
+        if (incoming.host !== who && !byEditor) return plans;
+        if (byEditor) incoming.editors = have!.editors;
         // A host's edit to a challenge changes its settings only: sign-ups, teams and everyone's log stay as this phone has them.
         const keep = (x: Plan): Plan => (x.challenge && incoming.challenge ? { going: x.going, challenge: { ...incoming.challenge, log: x.challenge.log, teams: x.challenge.teams } } as Plan : {} as Plan);
         return i < 0 ? [incoming, ...plans] : plans.map(x => (x.id === incoming.id ? { ...incoming, ...keep(x), rsvp: x.rsvp, remind: x.remind, calCopy: x.calCopy } : x));
       }
       if (op.t === 'cancel') return plans.filter(x => !(x.id === op.id && x.host === who));
       if (!plans.some(x => x.id === opPlanId(op))) return plans;
-      return plans.map(x => (x.id !== opPlanId(op) ? x : applyOp(x, op, who, { authorIsHost: x.host === who })));
+      return plans.map(x => (x.id !== opPlanId(op) ? x : applyOp(x, op, who, { authorIsHost: canEdit(x, who) })));
     };
     // A cancelled plan takes its chat with it.
     const dropChats = (chats: Chat[], plans: Plan[]) => (op.t === 'cancel' && !plans.some(x => x.id === op.id) ? chats.filter(c => c.gid !== op.id) : chats);

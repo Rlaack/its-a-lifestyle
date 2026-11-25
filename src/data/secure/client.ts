@@ -318,7 +318,10 @@ export type HoodMeta = { v: 1; name: string; about?: string; places?: string[]; 
   coverImg?: Attachment;
   /** The neighborhood's group ID, fixed when it first changes its code, so members who joined with
    *  different codes still land in the same encrypted group. */
-  gid?: string };
+  gid?: string;
+  /** The board secret: seals the neighborhood board (plans for everyone). Only members have it, and it
+   *  survives a new invite code because it travels inside these sealed settings. */
+  board?: string };
 
 // Each phone keeps a neighborhood under the code it joined with (its local key). After an owner
 // changes the code, relay calls use the current one, which the sync layer looks up here.
@@ -346,13 +349,13 @@ export async function coverRemoteHood(key: string, ownerSecret: string | undefin
 }
 
 /** Creates a neighborhood. Returns its invite code and the owner secret (kept only on owners' phones). */
-export async function createRemoteHood(meta: Omit<HoodMeta, 'v' | 'owners'>, myName: string): Promise<{ code: string; ownerSecret: string }> {
-  const c = native(), me = await ensureRegistered(), code = c.randomInviteCode(), ownerSecret = c.randomId() + c.randomId();
+export async function createRemoteHood(meta: Omit<HoodMeta, 'v' | 'owners'>, myName: string): Promise<{ code: string; ownerSecret: string; board: string }> {
+  const c = native(), me = await ensureRegistered(), code = c.randomInviteCode(), ownerSecret = c.randomId() + c.randomId(), board = c.randomId() + c.randomId();
   await api('/v1/hoods', { method: 'POST', body: JSON.stringify({
-    lookup: c.secretLookup(code), meta: c.sealWithSecret(code, JSON.stringify({ v: 1, ...meta, owners: [me] })),
+    lookup: c.secretLookup(code), meta: c.sealWithSecret(code, JSON.stringify({ v: 1, ...meta, owners: [me], board })),
     profile: c.sealWithSecret(code, JSON.stringify({ v: 1, account: me, name: myName, ak: myAccessKey ?? undefined })),
     ownerHash: c.sha256Hex(ownerSecret) }) });
-  return { code, ownerSecret };
+  return { code, ownerSecret, board };
 }
 
 /** Owners: replace the shared settings. With `newSecret`, the owner secret is rotated too. */
@@ -360,6 +363,33 @@ export async function updateRemoteMeta(key: string, meta: HoodMeta, ownerSecret:
   const c = native(), code = live(key);
   await api(`/v1/hoods/${c.secretLookup(code)}/meta`, { method: 'PUT', body: JSON.stringify({
     proof: ownerSecret, meta: c.sealWithSecret(code, JSON.stringify(meta)), ...(newSecret ? { newOwnerHash: c.sha256Hex(newSecret) } : {}) }) });
+}
+
+/* ---------- the neighborhood board ---------- */
+// Plans for everyone in a neighborhood, sealed with the board secret, so people who join later see them
+// at once. The relay only knows which account posted each one and who may change it.
+export type BoardItem = { id: string; author: string; editors: string[]; sealed: string; updated: number };
+export type BoardOp = { seq: number; plan: string; author: string; sealed: string };
+export async function boardGet(key: string, after = 0): Promise<{ items: BoardItem[]; ops: BoardOp[] }> {
+  const c = native(), code = live(key);
+  return api(`/v1/hoods/${c.secretLookup(code)}/board?after=${after}`);
+}
+export async function boardPut(key: string, secret: string, id: string, plan: unknown, editors?: string[]) {
+  const c = native(), code = live(key);
+  await api(`/v1/hoods/${c.secretLookup(code)}/board/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({
+    sealed: c.sealWithSecret(secret, JSON.stringify(plan)), ...(editors ? { editors } : {}) }) });
+}
+export async function boardRemove(key: string, id: string, ownerSecret?: string) {
+  const c = native(), code = live(key);
+  await api(`/v1/hoods/${c.secretLookup(code)}/board/${encodeURIComponent(id)}`, { method: 'DELETE', body: JSON.stringify(ownerSecret ? { proof: ownerSecret } : {}) });
+}
+export async function boardAddOp(key: string, secret: string, id: string, op: unknown) {
+  const c = native(), code = live(key);
+  await api(`/v1/hoods/${c.secretLookup(code)}/board/${encodeURIComponent(id)}/ops`, { method: 'POST', body: JSON.stringify({ sealed: c.sealWithSecret(secret, JSON.stringify(op)) }) });
+}
+/** Opens something sealed with the board secret (null if it doesn't open). */
+export function boardOpen<T>(secret: string, sealed: string): T | null {
+  try { return JSON.parse(native().openWithSecret(secret, sealed)) as T; } catch { return null; }
 }
 
 /** Owners: remove a member (they can't rejoin with that account). */

@@ -31,6 +31,10 @@ export type Challenge = {
 
 export type Plan = {
   id: string; type: PlanType; title: string; host: string;
+  /** Neighbors the host lets edit this plan too (names; 'You' on their phones). Only the host changes this. */
+  editors?: string[];
+  /** This phone's copy matches the neighborhood board as of this time (server ms). Never sent. */
+  bu?: number;
   y?: number; m: number; d: number; dow: string; time: string; where: string; precision: string;
   audience: Audience; invited?: string[]; excluded?: string[];
   going: string[]; maybe?: string[]; rsvp: 'going' | 'maybe' | 'no' | null;
