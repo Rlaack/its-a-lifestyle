@@ -1,6 +1,7 @@
 import { View } from 'react-native';
 import { router } from 'expo-router';
 import { Icon } from '@/components/Icon';
+import { NotificationBell } from '@/components/NotificationBell';
 import { Avatar, Button, IconButton, ListBox, Row, Screen, T } from '@/components/ui';
 import { PLAN_TYPES } from '@/data/planTypes';
 import { useStore } from '@/data/store';
@@ -23,7 +24,7 @@ export default function Chats() {
   const chats = useStore(s => s.chats);
   const plans = useStore(s => s.plans);
   return (
-    <Screen title="Chats" right={<IconButton name="plus" label="New chat" onPress={() => router.push('/new-chat')} />}>
+    <Screen title="Chats" right={<View style={{ flexDirection: 'row', gap: 8 }}><NotificationBell /><IconButton name="plus" label="New chat" onPress={() => router.push('/new-chat')} /></View>}>
       {chats.some(ch => !ch.secure && !ch.shared && !ch.system) && (
         <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center', padding: 12, borderRadius: 12, backgroundColor: c.emberSoft, borderWidth: 1, borderColor: c.ember }}>
           <Icon name="shield" size={16} color={c.ember} />

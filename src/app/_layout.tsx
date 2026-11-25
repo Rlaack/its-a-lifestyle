@@ -1,6 +1,8 @@
+import '@/data/backgroundSync';
 import { useEffect } from 'react';
 import { AppState, Linking } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, usePathname } from 'expo-router';
+import * as Notifications from 'expo-notifications';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFonts } from 'expo-font';
@@ -16,13 +18,38 @@ import { actions } from '@/data/store';
 import { startSecureMessaging, useSecureStatus } from '@/data/secure/sync';
 import { installCrashCatcher, offerCrashReport } from '@/data/crash';
 import { handleIncomingUrl } from '@/data/links';
+import { setViewing } from '@/data/activity';
+import { openNotification } from '@/data/openNotification';
+import { startReminders } from '@/data/reminders';
 
 installCrashCatcher();
 
 SplashScreen.preventAutoHideAsync();
 
+// Tapping a notification opens what it's about, once saved chats and plans are loaded.
+function useNotificationTaps(ready: boolean) {
+  useEffect(() => {
+    if (!ready) return;
+    const go = (r: Notifications.NotificationResponse | null) => {
+      if (!r || r.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER) return;
+      Notifications.clearLastNotificationResponse();
+      const data = (r.notification.request.content.data ?? {}) as Record<string, unknown>;
+      // A plain "something new" (from the relay) has no data: show the list.
+      setTimeout(() => { if (!openNotification(data)) openNotification({}); }, 0);
+    };
+    go(Notifications.getLastNotificationResponse());
+    const sub = Notifications.addNotificationResponseReceivedListener(go);
+    return () => sub.remove();
+  }, [ready]);
+}
+
 function Navigator() {
   const { c, isDark } = useTheme();
+  // Opening a chat or plan marks its notifications read.
+  const path = usePathname();
+  useEffect(() => { setViewing(path); }, [path]);
+  const secure = useSecureStatus();
+  useNotificationTaps(secure === 'ready' || secure === 'offline' || secure === 'unavailable');
   return (
     <>
       <StatusBar style={isDark ? 'light' : 'dark'} />
@@ -34,7 +61,7 @@ function Navigator() {
         <Stack.Screen name="calendar-add/[id]" options={{ presentation: 'modal' }} />
         <Stack.Screen name="calendars" options={{ presentation: 'modal' }} />
         <Stack.Screen name="chat-info/[id]" options={{ presentation: 'modal' }} />
-        {['visibility/[field]', 'my-code', 'scan', 'connect', 'phone', 'transfer', 'backup', 'subscribe', 'picture', 'blocked'].map(n => <Stack.Screen key={n} name={n} options={{ presentation: 'modal' }} />)}
+        {['visibility/[field]', 'my-code', 'scan', 'connect', 'phone', 'transfer', 'backup', 'subscribe', 'picture', 'blocked', 'notifications'].map(n => <Stack.Screen key={n} name={n} options={{ presentation: 'modal' }} />)}
       </Stack>
     </>
   );
@@ -53,7 +80,7 @@ export default function RootLayout() {
 
   // Disappearing messages: drop anything past its expiry every 30 seconds and whenever the app comes back.
   // Encrypted chats: register on first run, load saved chats, listen for messages. No-op in Expo Go.
-  useEffect(() => { startSecureMessaging(); }, []);
+  useEffect(() => { startSecureMessaging(); startReminders(); }, []);
   // Invite links: the full link (with the code after #) also arrives here, in case the router's copy lacks it.
   useEffect(() => {
     Linking.getInitialURL().then(handleIncomingUrl).catch(() => {});

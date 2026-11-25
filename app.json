@@ -67,7 +67,7 @@
         "expo-notifications",
         {
           "enableRemoteNotifications": true,
-          "enableBackgroundRemoteNotifications": false
+          "enableBackgroundRemoteNotifications": true
         }
       ],
       "expo-iap"

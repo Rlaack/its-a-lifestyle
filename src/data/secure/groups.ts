@@ -1,5 +1,6 @@
 import Crypto from '../../../modules/lifestyle-crypto';
-import { planForSending, planFromSender, type PlanOp } from '../planOps';
+import { opPlanId, planForSending, planFromSender, type PlanOp } from '../planOps';
+import { noteMessage, notePlanOp, noteReaction } from '../notices';
 import { actions, getState, onPlanOp } from '../store';
 import type { Chat, Message, Plan } from '../types';
 import { attFor, incomingMsg, outgoingMsg, type Outgoing } from './attachments';
@@ -408,15 +409,30 @@ export async function sendGroupAttachment(chat: Chat, pickedUri: string, o: Outg
 }
 
 /** Shows an incoming chat message; a photo is fetched, checked and decrypted in the background. */
+/** Already showing this message (a repeat delivery)? */
+function chatHas(hoodId: string | null, chatId: string, mid: string) {
+  const st = getState();
+  const chats = hoodId && hoodId !== st.cur ? st.stash[hoodId]?.chats ?? [] : st.chats;
+  return !!chats.find(c => c.id === chatId)?.msgs.some(m => 'mid' in m && m.mid === mid);
+}
+
 function showChatMessage(hoodId: string | null, chat: Chat, who: string, body: Extract<Body, { t: 'chat' }>) {
   if (body.loc !== undefined) {
-    if (isRoundedGeo(body.loc)) actions.appendChat(hoodId, chat, { f: who, type: 'loc', t: 'Approximate location (about 1 km)', geo: body.loc, mid: body.mid } as Message);
+    if (isRoundedGeo(body.loc)) {
+      const msg = { f: who, type: 'loc', t: 'Approximate location (about 1 km)', geo: body.loc, mid: body.mid } as Message;
+      const had = chatHas(hoodId, chat.id, body.mid);
+      actions.appendChat(hoodId, chat, msg);
+      if (!had) noteMessage({ chatId: chat.id, chatName: chat.name, who, msg, hood: hoodId, direct: false });
+    }
     return;
   }
   const att = body.att && typeof body.att === 'object' ? body.att : undefined;
-  actions.appendChat(hoodId, chat, (att
+  const msg = (att
     ? incomingMsg(att, who, body.mid, body.text)
-    : { f: who, t: String(body.text).slice(0, 4000), mid: body.mid }) as Message);
+    : { f: who, t: String(body.text).slice(0, 4000), mid: body.mid }) as Message;
+  const had = chatHas(hoodId, chat.id, body.mid);
+  actions.appendChat(hoodId, chat, msg);
+  if (!had) noteMessage({ chatId: chat.id, chatName: chat.name, who, msg, hood: hoodId, direct: false });
   if (att) downloadPhoto(att).then(uri => { actions.patchChatMsg(chat.id, body.mid, { uri }); ctx?.save(); }).catch(e => dbg('photo download failed', String(e)));
 }
 
@@ -513,7 +529,11 @@ export async function onGroupMessage(from: string, p: GroupPayload) {
   if (body.t === 'react') {
     if (ctx.isBlocked(from) || typeof body.mid !== 'string' || !validEmoji(body.e)) return;
     const chatId = g.kind === 'hood' ? (body.plan ? `c-${body.plan}` : null) : groupChatId(g.id);
-    if (chatId) { actions.reactById(chatId, body.mid, who, body.e, body.on !== false); ctx.save(); }
+    if (chatId) {
+      actions.reactById(chatId, body.mid, who, body.e, body.on !== false);
+      noteReaction({ chatId, who, e: body.e, mid: body.mid, on: body.on !== false, hood: g.kind === 'hood' && g.hood ? ctx.hoodIdOf(g.hood) : null });
+      ctx.save();
+    }
     return;
   }
   if (body.t === 'profile') { if (!ctx.isBlocked(from) && body.pic && typeof body.pic === 'object') ctx.onProfile(from, who, body.pic); return; }
@@ -530,7 +550,11 @@ export async function onGroupMessage(from: string, p: GroupPayload) {
       // A change to a plan this phone never got (missed while offline, or from before I joined):
       // ask the neighborhood to send its plans again. Throttled.
       if (op.t !== 'plan' && op.t !== 'cancel' && !actions.plansOf(hoodId).some(x => x.id === op.id)) askAgain(g);
+      const pid = opPlanId(op);
+      const before = actions.plansOf(hoodId).find(x => x.id === pid);
       actions.applyRemote(hoodId, op, who);
+      const after = actions.plansOf(hoodId).find(x => x.id === pid);
+      if (before !== after) notePlanOp(hoodId, op, who, before, after);
       ctx.save();
       return;
     }

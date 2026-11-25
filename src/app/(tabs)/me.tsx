@@ -117,9 +117,13 @@ export default function MeScreen() {
         </ListBox>
       </Section>
 
-      <Section title="Reminders">
+      <Section title="Notifications and reminders">
         <ListBox>
-          <View style={{ padding: 14, gap: 8 }}>
+          <Pressable onPress={() => router.push('/notifications')} accessibilityRole="button" style={{ padding: 14, flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+            <Icon name="bell" color={c.ink} />
+            <View style={{ flex: 1 }}><T variant="strong" style={{ fontSize: 15 }}>Notifications</T><T variant="muted">See what’s new and choose what your phone tells you about</T></View>
+          </Pressable>
+          <View style={{ padding: 14, gap: 8, borderTopWidth: 1, borderTopColor: c.line }}>
             <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
               <Icon name="bell" color={c.ink} />
               <View style={{ flex: 1 }}><T variant="strong" style={{ fontSize: 15 }}>When you say you’re going</T><T variant="muted">Default reminder. You can change it on any event.</T></View>

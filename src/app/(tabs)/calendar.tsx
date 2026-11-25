@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { PlanCard } from '@/components/cards';
+import { NotificationBell } from '@/components/NotificationBell';
 import { IconButton, Screen, Section, T } from '@/components/ui';
 import { actions, byDate, spanDays, useStore } from '@/data/store';
 import type { Calendar, Plan } from '@/data/types';
@@ -41,7 +42,7 @@ export default function CalendarScreen() {
   const onCount = cals.filter(x => x.on).length;
 
   return (
-    <Screen title="Calendar" right={<IconButton name="users" label="Who’s on each calendar" onPress={() => router.push('/calendars')} />}>
+    <Screen title="Calendar" right={<View style={{ flexDirection: 'row', gap: 8 }}><NotificationBell /><IconButton name="users" label="Who’s on each calendar" onPress={() => router.push('/calendars')} /></View>}>
       <View style={{ gap: 8 }}>
         <View style={styles.chips}>
           {cals.map((cal, i) => {

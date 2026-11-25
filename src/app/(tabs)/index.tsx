@@ -5,6 +5,7 @@ import { BeaconCard, LakeScene, NeedCard, PlanCard, PollCard, ChallengeCard } fr
 import { phaseOf } from '@/data/challenge';
 import { LakeLogo } from '@/components/LakeLogo';
 import { Icon } from '@/components/Icon';
+import { NotificationBell } from '@/components/NotificationBell';
 import { Screen, Section, T } from '@/components/ui';
 import { byDate, isPast, openCount, useStore } from '@/data/store';
 import { fonts } from '@/theme/tokens';
@@ -26,7 +27,7 @@ export default function Home() {
   const showDrawing = hoodMap === 'lake' && (!cover || cover.kind === 'drawing');
 
   return (
-    <Screen header={
+    <Screen right={<NotificationBell />} header={
       <Pressable style={{ flex: 1 }} onPress={() => router.push('/neighborhood')} accessibilityRole="button" accessibilityLabel={`${hoodName} neighborhood`}>
         {cur === 'lake' ? <LakeLogo height={52} /> : <Text style={{ fontFamily: fonts.logo, fontSize: 26, color: c.pine }}>{hoodName}</Text>}
       </Pressable>}>

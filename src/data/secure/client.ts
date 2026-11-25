@@ -588,10 +588,10 @@ export const finishTransfer = (id: string, key: string) =>
 
 /* ---------- push wake-ups ---------- */
 
-/** Registers this phone's Apple push token (or clears it with null). The relay only ever sends an
- *  empty "you have something new" ping to it. */
-export const setPushToken = (token: string | null, env: 'sandbox' | 'production') =>
-  api('/v1/push', { method: 'PUT', body: JSON.stringify({ token, env }) });
+/** Registers this phone's Apple push token (or clears it with null). The relay only ever sends it an
+ *  empty ping: a silent wake-up (`bg`), or a plain "you have something new". */
+export const setPushToken = (token: string | null, env: 'sandbox' | 'production', bg = false) =>
+  api('/v1/push', { method: 'PUT', body: JSON.stringify({ token, env, bg }) });
 
 /** Re-posts my profile in a neighborhood (adds my access key to profiles made before sealed sender). */
 export async function refreshMyHoodProfile(key: string, myName: string) {

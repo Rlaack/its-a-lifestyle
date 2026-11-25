@@ -8,7 +8,9 @@ import { attFor, incomingMsg, localUri, outgoingMsg, tooBigText, type Outgoing }
 import type { Chat, Member, Message, Pic, Plan } from '../types';
 import { planForSending, planFromSender, type PlanOp } from '../planOps';
 import { SAMPLE_MODE } from '../store';
-import { enablePush, listenForWakeups } from './push';
+import { enablePush, listenForWakeups, postActivity, refreshBadge } from './push';
+import { activityForSave, boardKnown, initActivity, loadActivity, markBoardKnown, quietHood, resetActivity } from '../activity';
+import { noteMessage, noteNewPlan, noteReaction } from '../notices';
 import { rotateMyGroupKeys, rotateAfterDeviceRemoved, chatGroupsForSync, mergeChatGroups, onMyMirror, sendGroupTimer, hoodGroupId, setHoodGidLookup, announceMeta, catchUpAll, resetGroups, sendReport, requestGroupKey, sendOwnerSecret, resendGroupKeys, dropHoodGroup, flushOutbox, groupState, initGroups, loadGroupState, onGroupKey, onGroupMessage, sayHello, sendGroupReaction, sendMyPicture, syncHoodGroup, validEmoji, type Group, type OutboxItem, type SharedPic } from './groups';
 import {
   confirmPhone, createRemoteHood, ensureRegistered, findByPhone, joinRemoteHood, leaveRemoteHood, looksLikeRemoteCode,
@@ -37,7 +39,9 @@ type Saved = { v: 1; agreed?: boolean; myName: string | null; myPhone?: string |
   /** My picture as shared, and neighbors' pictures by account (with the name they had). */
   myPic?: SharedPic; pics?: Record<string, { name: string; pic: SharedPic }>;
   /** The name each blocked person had when blocked, for the Blocked list. */
-  blockedNames?: Record<string, string> };
+  blockedNames?: Record<string, string>;
+  /** The notification list behind the bell, and the notification settings. */
+  activity?: ReturnType<typeof activityForSave> };
 export type SecureStatus = 'unavailable' | 'starting' | 'ready' | 'offline' | 'closed';
 
 const VAULT = 'chats-v1';
@@ -162,7 +166,7 @@ async function writeVault() {
       hoodData[h.code] = d ? { plans: d.plans, chats: d.chats.filter(c => c.shared?.plan || c.system) } : savedHoodData?.[h.code] ?? { plans: [], chats: [] };
     }
     const { groups, outbox } = groupState();
-    const data: Saved = { v: 1, agreed, myName, myPhone, contacts, hoods, groups, outbox, hoodData, cur: st.cur, blocked, accessKeys, myPic, pics, blockedNames,
+    const data: Saved = { v: 1, agreed, myName, myPhone, contacts, hoods, groups, outbox, hoodData, cur: st.cur, blocked, accessKeys, myPic, pics, blockedNames, activity: activityForSave(),
       chats: st.chats.filter(c => c.secure || (c.shared && !c.shared.plan)) };
     try { await Crypto!.vaultWrite(VAULT, JSON.stringify(data)); } catch (e) { console.warn('Could not save encrypted chats', e); }
     shareStateWithMyDevices();
@@ -224,6 +228,7 @@ export async function startSecureMessaging() {
     // The owner re-sealed my profile; post my own so my name is mine again.
     if (myName) setTimeout(() => refreshMyHoodProfile(k, myName!).catch(() => {}), 0);
   });
+  initActivity({ save, post: postActivity });
   initGroups({
     me: () => ({ account: myAccount, name: myName }),
     nameOf: (a, code) => contacts.find(c => c.account === a)?.name ?? (code ? hoodMembers[code]?.find(m => m.account === a)?.name : hoodNameFor(a)),
@@ -259,6 +264,8 @@ export async function startSecureMessaging() {
       blockedNames = saved.blockedNames ?? {};
       accessKeys = saved.accessKeys ?? {};
       myPic = saved.myPic; pics = saved.pics ?? {};
+      loadActivity(saved.activity);
+      refreshBadge();
       showPic('You', myPic);
       for (const p of Object.values(pics)) showPic(p.name, p.pic);
       loadGroupState(saved);
@@ -305,7 +312,29 @@ async function pollLoop(gen: number) {
   }
 }
 
-async function pollOnce() {
+// One fetch at a time: the background wake-up and the open app's loop may both ask.
+let polling: Promise<void> | null = null;
+function pollOnce(): Promise<void> {
+  return (polling ??= pollQueue().finally(() => { polling = null; }));
+}
+
+/** Woken in the background by a push: fetch and decrypt what's waiting, show it as notifications, save.
+ *  Returns whether anything arrived. iOS gives this about 30 seconds. */
+export async function syncInBackground(): Promise<boolean> {
+  if (!started) await startSecureMessaging();
+  for (let i = 0; i < 50 && status === 'starting'; i++) await new Promise(r => setTimeout(r, 100));
+  if (__DEV__) console.log('[push] background sync, status', status);
+  if (status !== 'ready' && status !== 'offline') return false;
+  const before = getState();
+  await pollOnce();
+  if (__DEV__) console.log('[push] background sync done, new:', getState() !== before);
+  await flushOutbox().catch(() => {});
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+  await writeVault();
+  return getState() !== before;
+}
+
+async function pollQueue() {
   for (const r of await receive()) {
     if (r.from === myAccount) { if (r.ok && r.payload.kind === 'sync') await onSyncFromMyDevice(r.payload).catch(() => {}); continue; }
     const contact = contacts.find(c => c.account === r.from);
@@ -337,7 +366,12 @@ async function pollOnce() {
     }
     const pl = r.payload;
     if (pl.kind === 'react') {
-      if (validEmoji(pl.e)) { actions.reactById(chatIdFor(r.from), pl.mid, contact?.name ?? hoodNameFor(r.from) ?? 'Neighbor', pl.e, pl.on !== false); save(); }
+      if (validEmoji(pl.e)) {
+        const who = contact?.name ?? hoodNameFor(r.from) ?? 'Neighbor';
+        actions.reactById(chatIdFor(r.from), pl.mid, who, pl.e, pl.on !== false);
+        noteReaction({ chatId: chatIdFor(r.from), who, e: pl.e, mid: pl.mid, on: pl.on !== false });
+        save();
+      }
       continue;
     }
     if (pl.kind !== 'text') continue;
@@ -348,20 +382,27 @@ async function pollOnce() {
     const chat = getState().chats.find(c => c.id === chatIdFor(r.from));
     if (chat?.msgs.some(m => 'mid' in m && m.mid === pl.id)) continue; // duplicate delivery
     const sender = contact?.name ?? hoodNameFor(r.from) ?? pl.from?.name?.slice(0, 40);
+    const note = (msg: Message) => noteMessage({ chatId: chatIdFor(r.from), chatName: sender ?? 'Neighbor', who: sender ?? 'Someone new', msg, direct: true });
     if (pl.loc !== undefined) {
       if (!isRoundedGeo(pl.loc)) continue; // too precise or malformed: not shown
-      appendTo(r.from, { f: sender ?? `Neighbor ${short(r.from)}`, type: 'loc', t: 'Approximate location (about 1 km)', geo: pl.loc, mid: pl.id }, pl.from?.name?.slice(0, 40));
+      const msg: Message = { f: sender ?? `Neighbor ${short(r.from)}`, type: 'loc', t: 'Approximate location (about 1 km)', geo: pl.loc, mid: pl.id };
+      appendTo(r.from, msg, pl.from?.name?.slice(0, 40));
+      note(msg);
       continue;
     }
     if (pl.att && typeof pl.att === 'object') {
       const att = pl.att;
-      appendTo(r.from, incomingMsg(att, sender ?? `Neighbor ${short(r.from)}`, pl.id, pl.text), pl.from?.name?.slice(0, 40));
+      const msg = incomingMsg(att, sender ?? `Neighbor ${short(r.from)}`, pl.id, pl.text);
+      appendTo(r.from, msg, pl.from?.name?.slice(0, 40));
+      note(msg);
       // Fetch, check and decrypt in the background; the bubble shows "loading" until then.
       downloadPhoto(att).then(uri => patchMsg(r.from, pl.id, { uri }))
         .catch(e => { if (__DEV__) console.log('[photo] could not load', String(e)); });
       continue;
     }
-    appendTo(r.from, { f: sender ?? `Neighbor ${short(r.from)}`, t: pl.text, mid: pl.id }, pl.from?.name?.slice(0, 40));
+    const msg: Message = { f: sender ?? `Neighbor ${short(r.from)}`, t: pl.text, mid: pl.id };
+    appendTo(r.from, msg, pl.from?.name?.slice(0, 40));
+    note(msg);
   }
 }
 
@@ -661,6 +702,7 @@ export async function createHoodOnline(name: string, extra: { about?: string; pl
 export async function joinHoodOnline(code: string): Promise<string | null> {
   const r = await joinRemoteHood(code, myName ?? 'Neighbor');
   if (!r) return null;
+  quietHood(`r-${r.code}`); // its plans arrive now, all at once: not news
   hoods = [...hoods.filter(h => h.code !== r.code), { code: r.code, name: r.name }];
   hoodMembers[r.code] = r.members;
   hoodMeta[r.code] = r.meta;
@@ -852,6 +894,7 @@ async function restartFresh() {
   for (const k of Object.keys(hoodMeta)) delete hoodMeta[k];
   savedHoodData = {}; savedCur = undefined; accessKeys = {}; myPic = undefined; pics = {}; blockedNames = {};
   resetGroups();
+  resetActivity();
   actions.resetAll();
   setStatus('starting');
   await startSecureMessaging();
@@ -1126,6 +1169,12 @@ async function readBoard(code: string) {
     items.push({ plan, bu: it.updated, rebuild, ops: changes });
   }
   actions.boardMerge(hoodId, items, new Set(first.items.map(i => i.id)));
+  // Plans neighbors posted while this phone wasn't listening. Not on the first read after joining.
+  if (boardKnown(code)) {
+    const now = actions.plansOf(hoodId);
+    for (const it of items) if (!mine.some(p => p.id === it.plan.id)) { const p = now.find(x => x.id === it.plan.id); if (p) noteNewPlan(hoodId, p); }
+  }
+  markBoardKnown(code);
   if (ops.length) boardSeen[code] = ops[ops.length - 1].seq;
   // My plans for everyone that aren't on the board yet: post them now.
   for (const p of actions.plansOf(hoodId)) if (p.host === 'You' && forEveryone(p) && !p.bu && !first.items.some(i => i.id === p.id)) publishToBoard(code, secret, p);

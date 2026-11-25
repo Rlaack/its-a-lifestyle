@@ -144,6 +144,8 @@ if (BILLING_ON) db.prepare('INSERT OR IGNORE INTO hood_plans (lookup, sub, free_
 
 // Added after launch: older databases get the column here.
 try { db.exec('ALTER TABLE attachments ADD COLUMN keep INTEGER NOT NULL DEFAULT 0'); } catch { /* already there */ }
+// Phones that write their own notifications (1.0.2 and later) get a silent wake-up first.
+try { db.exec('ALTER TABLE push_tokens ADD COLUMN bg INTEGER NOT NULL DEFAULT 0'); } catch { /* already there */ }
 
 const lq = {
   add: db.prepare('INSERT INTO device_links VALUES (?,?,?)'),
@@ -226,8 +228,9 @@ const q = {
   metaSet: db.prepare('UPDATE hoods SET meta = ? WHERE lookup = ?'),
   ban: db.prepare('INSERT OR IGNORE INTO hood_bans VALUES (?,?)'),
   isBanned: db.prepare('SELECT 1 AS x FROM hood_bans WHERE lookup = ? AND account = ?'),
-  pushSet: db.prepare('INSERT OR REPLACE INTO push_tokens VALUES (?,?,?,?)'),
-  pushGet: db.prepare('SELECT token, env FROM push_tokens WHERE account = ? AND device = ?'),
+  pushSet: db.prepare('INSERT OR REPLACE INTO push_tokens (account, device, token, env, bg) VALUES (?,?,?,?,?)'),
+  pushGet: db.prepare('SELECT token, env, bg FROM push_tokens WHERE account = ? AND device = ?'),
+  waitingSince: db.prepare('SELECT COUNT(*) AS n FROM queue WHERE account = ? AND device = ? AND ts <= ?'),
   pushDrop: db.prepare('DELETE FROM push_tokens WHERE account = ? AND device = ?'),
   accessSet: db.prepare('INSERT OR REPLACE INTO access_keys VALUES (?,?)'),
   accessGet: db.prepare('SELECT key_hash FROM access_keys WHERE account = ?'),
@@ -245,9 +248,11 @@ const LOOKUP = /^[0-9a-f]{64}$/;
 const isSealed = (s) => isB64(s, 4096);
 
 /* ---------- push wake-ups (Apple) ----------
- * A push carries no message, no name and no sender: only "You have something new." The phone opens
- * the app, which fetches and decrypts the real messages itself. Apple learns only that this device
- * got a ping. At most one ping per device every 30 seconds. */
+ * A push carries no message, no name and no sender. Phones that can (1.0.2 and later) get a silent
+ * wake-up: the app fetches and decrypts on the phone, then shows its own notification with the real
+ * text, which never leaves the phone. If the phone hasn't picked its messages up 20 seconds later (iOS
+ * didn't wake it, or the app was force-quit), the relay sends the plain "You have something new." Older
+ * phones get that plain one straight away. Apple learns only that this device got a ping. */
 const APNS = process.env.APNS_KEY_B64 && process.env.APNS_KEY_ID && process.env.APNS_TEAM_ID ? {
   key: createPrivateKey(Buffer.from(process.env.APNS_KEY_B64, 'base64').toString('utf8')),
   keyId: process.env.APNS_KEY_ID, team: process.env.APNS_TEAM_ID, topic: process.env.APNS_TOPIC ?? 'com.itsalifestyle.app',
@@ -262,21 +267,18 @@ function apnsToken() {
   apnsJwt = { token: `${head}.${sig}`, at: now };
   return apnsJwt.token;
 }
-const lastPush = new Map();
-function wake(account, device) {
-  if (!APNS) return;
-  const row = q.pushGet.get(account, device);
-  if (!row) return;
-  const k = `${account}.${device}`, now = Date.now();
-  if (now - (lastPush.get(k) ?? 0) < 30_000) return;
-  lastPush.set(k, now);
+const PUSH_GAP_MS = 30_000, FALLBACK_MS = 20_000;
+const lastPush = new Map(), laterPush = new Map(), lastAlert = new Map();
+function apns(account, device, row, kind) {
   const host = row.env === 'sandbox' ? 'https://api.sandbox.push.apple.com' : 'https://api.push.apple.com';
+  const silent = kind === 'silent';
   try {
     const client = h2connect(host);
     client.on('error', () => client.close());
     const req = client.request({
-      ':method': 'POST', ':path': `/3/device/${row.token}`, authorization: `bearer ${apnsToken()}`,
-      'apns-topic': APNS.topic, 'apns-push-type': 'alert', 'apns-priority': '10', 'apns-collapse-id': 'new', 'content-type': 'application/json',
+      ':method': 'POST', ':path': `/3/device/${row.token}`, authorization: `bearer ${apnsToken()}`, 'apns-topic': APNS.topic,
+      ...(silent ? { 'apns-push-type': 'background', 'apns-priority': '5' } : { 'apns-push-type': 'alert', 'apns-priority': '10', 'apns-collapse-id': 'new' }),
+      'content-type': 'application/json',
     });
     req.setEncoding('utf8');
     let status = 0, body = '';
@@ -284,12 +286,37 @@ function wake(account, device) {
     req.on('data', (d) => { body += d; });
     req.on('end', () => {
       client.close();
-      if (process.env.PUSH_DEBUG === '1') console.log(`push ${row.env} -> ${status} ${body}`);
+      if (process.env.PUSH_DEBUG === '1') console.log(`push ${kind} ${row.env} -> ${status} ${body}`);
       // Apple says the token is dead (app deleted, or a token from the other environment): forget it.
       if (status === 410 || (status === 400 && /BadDeviceToken|DeviceTokenNotForTopic/.test(body))) q.pushDrop.run(account, device);
     });
-    req.end(JSON.stringify({ aps: { alert: { title: 'It’s a Lifestyle', body: 'You have something new.' }, sound: 'default' } }));
+    req.end(JSON.stringify(silent
+      ? { aps: { 'content-available': 1 } }
+      : { aps: { alert: { title: 'It’s a Lifestyle', body: 'You have something new. Open the app to see it.' }, sound: 'default' } }));
   } catch { /* a missed ping only delays delivery until the app is opened */ }
+}
+function wake(account, device) {
+  if (!APNS) return;
+  const row = q.pushGet.get(account, device);
+  if (!row) return;
+  const k = `${account}.${device}`, now = Date.now();
+  const wait = PUSH_GAP_MS - (now - (lastPush.get(k) ?? 0));
+  if (wait > 0) {
+    // Pinged a moment ago: one more ping when the gap is up, so later messages aren't left waiting.
+    if (row.bg && !laterPush.has(k)) laterPush.set(k, setTimeout(() => { laterPush.delete(k); wake(account, device); }, wait).unref());
+    return;
+  }
+  lastPush.set(k, now);
+  if (!row.bg) { apns(account, device, row, 'alert'); return; }
+  apns(account, device, row, 'silent');
+  setTimeout(() => {
+    // Still waiting: iOS didn't wake the app. Fall back to the plain notification (at most one a minute).
+    if (q.waitingSince.get(account, device, now).n === 0) return;
+    if (Date.now() - (lastAlert.get(k) ?? 0) < 60_000) return;
+    lastAlert.set(k, Date.now());
+    const cur = q.pushGet.get(account, device);
+    if (cur) apns(account, device, cur, 'alert');
+  }, FALLBACK_MS).unref();
 }
 
 /* ---------- sealed sender ----------
@@ -581,10 +608,10 @@ const routes = {
   // Register (or clear, with token null) this device's Apple push token.
   'PUT /v1/push': async (req) => {
     const me = auth(req); limit(`push:${me.account}`, 20);
-    const { token, env } = await readJson(req);
+    const { token, env, bg } = await readJson(req);
     if (token === null) { q.pushDrop.run(me.account, me.device); return [204]; }
     if (!/^[0-9a-f]{64,200}$/.test(token ?? '') || !['sandbox', 'production'].includes(env)) throw new HttpError(400, 'invalid push token');
-    q.pushSet.run(me.account, me.device, token, env);
+    q.pushSet.run(me.account, me.device, token, env, bg === true ? 1 : 0);
     return [204];
   },
 
